@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files
+.env
+.env.*
+
+# Session data (contains conversation history)
+data/sessions/*.jsonl
+
+# OS files
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
