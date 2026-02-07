@@ -1,6 +1,6 @@
 # CompanionBot
 
-AI 친구 텔레그램 봇. Claude API 기반으로 개인화된 페르소나를 가진 대화 상대.
+Claude 기반의 개인화된 페르소나를 가진 AI Companion Bot
 
 ## 기능
 
