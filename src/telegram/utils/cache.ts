@@ -39,5 +39,6 @@ export async function getWorkspace(): Promise<Workspace> {
  */
 export function invalidateWorkspaceCache(): void {
   cachedWorkspace = null;
+  workspaceCacheTime = 0;
   loadingPromise = null;
 }

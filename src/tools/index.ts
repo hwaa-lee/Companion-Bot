@@ -483,8 +483,8 @@ export async function executeTool(
           "which", "env", "printenv"
         ];
 
-        // 명령어 체이닝/치환 차단 (;, &&, ||, |, `, $())
-        if (/[;&|`]|\$\(/.test(command)) {
+        // 명령어 체이닝/치환 차단 (;, &&, ||, |, `, $(), ${})
+        if (/[;&|`]|\$\(|\$\{/.test(command)) {
           return `Error: Command chaining and substitution not allowed.`;
         }
 
@@ -503,10 +503,18 @@ export async function executeTool(
         }
 
         try {
+          // 환경 변수는 필요한 것만 화이트리스트로 전달 (민감 정보 노출 방지)
+          const safeEnv: Record<string, string> = {
+            PATH: process.env.PATH || "",
+            HOME: process.env.HOME || "",
+            USER: process.env.USER || "",
+            LANG: process.env.LANG || "en_US.UTF-8",
+            TERM: process.env.TERM || "xterm",
+          };
           const { stdout, stderr } = await execAsync(command, {
             cwd,
             timeout: 30000,
-            env: { ...process.env, ANTHROPIC_API_KEY: undefined }, // API 키 숨김
+            env: safeEnv,
           });
           return stdout || stderr || "Command executed (no output)";
         } catch (error) {

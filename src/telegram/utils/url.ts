@@ -29,18 +29,16 @@ export function isSafeUrl(url: string): boolean {
       hostname === "0.0.0.0" ||
       hostname.startsWith("192.168.") ||
       hostname.startsWith("10.") ||
-      hostname.startsWith("172.16.") ||
-      hostname.startsWith("172.17.") ||
-      hostname.startsWith("172.18.") ||
-      hostname.startsWith("172.19.") ||
-      hostname.startsWith("172.2") ||
-      hostname.startsWith("172.30.") ||
-      hostname.startsWith("172.31.") ||
       hostname.endsWith(".local") ||
       hostname.endsWith(".internal") ||
       hostname === "169.254.169.254" || // AWS/Cloud metadata
       (hostname.endsWith(".amazonaws.com") && hostname.includes("metadata"))
     ) {
+      return false;
+    }
+
+    // 172.16.0.0/12 (172.16.x.x ~ 172.31.x.x) 정확히 차단
+    if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)) {
       return false;
     }
 

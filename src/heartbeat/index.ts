@@ -181,6 +181,9 @@ function updateTimestampCache(
   timestampCache.set(chatId, { ...current, ...updates });
 }
 
+// 실행 중인 heartbeat 추적 (중첩 실행 방지)
+const runningHeartbeats: Set<number> = new Set();
+
 // 타이머 스케줄
 function scheduleHeartbeat(config: HeartbeatConfig): void {
   // 기존 타이머 취소
@@ -192,8 +195,18 @@ function scheduleHeartbeat(config: HeartbeatConfig): void {
 
   if (!config.enabled) return;
 
-  const timer = setInterval(() => {
-    executeHeartbeat(config);
+  const timer = setInterval(async () => {
+    // 이미 실행 중이면 스킵 (중첩 방지)
+    if (runningHeartbeats.has(config.chatId)) {
+      console.log(`[Heartbeat] Skipping ${config.chatId} - already running`);
+      return;
+    }
+    runningHeartbeats.add(config.chatId);
+    try {
+      await executeHeartbeat(config);
+    } finally {
+      runningHeartbeats.delete(config.chatId);
+    }
   }, config.intervalMs);
 
   activeTimers.set(config.chatId, timer);

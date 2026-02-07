@@ -1,0 +1,28 @@
+# Source files (dist/ 사용)
+src/
+tsconfig.json
+*.ts
+
+# Development
+.env
+.env.*
+CLAUDE.md
+
+# OS/IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Test
+coverage/
+*.test.ts
+
+# Git
+.git/
+.gitignore
+
+# npm
+*.tgz
+
+# Session data
+data/
