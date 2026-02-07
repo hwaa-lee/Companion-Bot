@@ -10,10 +10,12 @@ async function showStatus() {
 
   const telegram = await getSecret("telegram-token");
   const anthropic = await getSecret("anthropic-api-key");
+  const brave = await getSecret("brave-api-key");
   const workspaceReady = await isWorkspaceInitialized();
 
   console.log(`Telegram Bot Token: ${telegram ? "✓ 설정됨" : "✗ 미설정"}`);
   console.log(`Anthropic API Key:  ${anthropic ? "✓ 설정됨" : "✗ 미설정"}`);
+  console.log(`Brave API Key:      ${brave ? "✓ 설정됨" : "✗ 미설정 (선택)"}`);
   console.log(`워크스페이스:       ${workspaceReady ? "✓ 초기화됨" : "✗ 미초기화"}`);
   if (workspaceReady) {
     console.log(`  경로: ${getWorkspacePath()}`);
@@ -41,6 +43,16 @@ async function setupAnthropic(key: string) {
   console.log("✓ Anthropic API Key가 OS 키체인에 저장되었습니다.");
 }
 
+async function setupBrave(key: string) {
+  if (!key.trim()) {
+    console.log("Error: API 키를 입력해주세요.");
+    return;
+  }
+
+  await setSecret("brave-api-key", key.trim());
+  console.log("✓ Brave API Key가 OS 키체인에 저장되었습니다.");
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -64,6 +76,13 @@ async function main() {
       }
       await setupAnthropic(value);
       break;
+    case "brave":
+      if (!value) {
+        console.log("사용법: npm run setup brave <API_KEY>");
+        return;
+      }
+      await setupBrave(value);
+      break;
     case "delete":
       if (value === "telegram") {
         await deleteSecret("telegram-token");
@@ -71,8 +90,11 @@ async function main() {
       } else if (value === "anthropic") {
         await deleteSecret("anthropic-api-key");
         console.log("✓ Anthropic API Key 삭제됨");
+      } else if (value === "brave") {
+        await deleteSecret("brave-api-key");
+        console.log("✓ Brave API Key 삭제됨");
       } else {
-        console.log("사용법: npm run setup delete <telegram|anthropic>");
+        console.log("사용법: npm run setup delete <telegram|anthropic|brave>");
       }
       break;
     case "init":
@@ -100,12 +122,13 @@ async function main() {
 CompanionBot 설정
 
 사용법:
-  npm run setup status                      현재 설정 상태 확인
-  npm run setup telegram <TOKEN>            Telegram Bot Token 설정
-  npm run setup anthropic <API_KEY>         Anthropic API Key 설정
-  npm run setup delete <telegram|anthropic> 키 삭제
-  npm run setup init                        워크스페이스 초기화
-  npm run setup reset workspace             워크스페이스 리셋
+  npm run setup status                              현재 설정 상태 확인
+  npm run setup telegram <TOKEN>                    Telegram Bot Token 설정
+  npm run setup anthropic <API_KEY>                 Anthropic API Key 설정
+  npm run setup brave <API_KEY>                     Brave API Key 설정 (선택, 웹 검색용)
+  npm run setup delete <telegram|anthropic|brave>   키 삭제
+  npm run setup init                                워크스페이스 초기화
+  npm run setup reset workspace                     워크스페이스 리셋
       `);
   }
 }

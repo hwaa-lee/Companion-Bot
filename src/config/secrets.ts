@@ -2,7 +2,7 @@ import keytar from "keytar";
 
 const SERVICE_NAME = "companionbot";
 
-export type SecretKey = "telegram-token" | "anthropic-api-key" | "openweathermap-api-key";
+export type SecretKey = "telegram-token" | "anthropic-api-key" | "openweathermap-api-key" | "brave-api-key";
 
 export async function getSecret(key: SecretKey): Promise<string | null> {
   return keytar.getPassword(SERVICE_NAME, key);

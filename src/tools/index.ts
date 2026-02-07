@@ -45,6 +45,7 @@ import {
   listAgents,
   cancelAgent,
 } from "../agents/index.js";
+import * as cheerio from "cheerio";
 
 const execAsync = promisify(exec);
 
@@ -583,6 +584,51 @@ Example: "서브에이전트한테 이 코드 분석 시켜줘"`,
         },
       },
       required: ["agent_id"],
+    },
+  },
+  // ============== 웹 검색/가져오기 ==============
+  {
+    name: "web_search",
+    description: `Search the web using Brave Search API. Use when the user asks to search for information online.
+
+Examples:
+- "최신 뉴스 검색해줘" → query: "최신 뉴스"
+- "React 19 새로운 기능" → query: "React 19 new features"`,
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query",
+        },
+        count: {
+          type: "number",
+          description: "Number of results to return (default: 5, max: 20)",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "web_fetch",
+    description: `Fetch and extract readable content from a URL. Use when you need to read the content of a web page.
+
+Examples:
+- "이 링크 내용 요약해줘" → url: "https://..."
+- "이 기사 읽어줘" → url: "https://..."`,
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: {
+          type: "string",
+          description: "The URL to fetch",
+        },
+        maxChars: {
+          type: "number",
+          description: "Maximum characters to return (default: 5000)",
+        },
+      },
+      required: ["url"],
     },
   },
 ];
@@ -1216,6 +1262,107 @@ ${"─".repeat(40)}`;
         }
       }
 
+      // ============== 웹 검색/가져오기 ==============
+      case "web_search": {
+        const query = input.query as string;
+        const count = Math.min(Math.max((input.count as number) || 5, 1), 20);
+
+        const apiKey = await getSecret("brave-api-key");
+        if (!apiKey) {
+          return "Error: Brave API key not configured. Ask user to set it up with: npm run setup brave <API_KEY>";
+        }
+
+        try {
+          const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${count}`;
+          const response = await fetch(url, {
+            headers: {
+              "Accept": "application/json",
+              "X-Subscription-Token": apiKey,
+            },
+          });
+
+          if (!response.ok) {
+            return `Error: Brave Search API returned ${response.status}: ${response.statusText}`;
+          }
+
+          const data = await response.json();
+          const results = data.web?.results || [];
+
+          if (results.length === 0) {
+            return `No results found for "${query}"`;
+          }
+
+          const formatted = results.map((r: { title: string; url: string; description: string }, i: number) => {
+            return `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.description || ""}`;
+          });
+
+          return `Search results for "${query}":\n\n${formatted.join("\n\n")}`;
+        } catch (error) {
+          return `Error searching: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      }
+
+      case "web_fetch": {
+        const url = input.url as string;
+        const maxChars = (input.maxChars as number) || 5000;
+
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+          return "Error: URL must start with http:// or https://";
+        }
+
+        try {
+          const response = await fetch(url, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (compatible; CompanionBot/1.0)",
+            },
+          });
+
+          if (!response.ok) {
+            return `Error: Failed to fetch URL (${response.status}: ${response.statusText})`;
+          }
+
+          const html = await response.text();
+          const $ = cheerio.load(html);
+
+          // 불필요한 요소 제거
+          $("script, style, nav, header, footer, aside, iframe, noscript").remove();
+
+          // 본문 텍스트 추출
+          let text = "";
+          
+          // article 태그 우선
+          const article = $("article");
+          if (article.length > 0) {
+            text = article.text();
+          } else {
+            // main 태그 시도
+            const main = $("main");
+            if (main.length > 0) {
+              text = main.text();
+            } else {
+              // body 전체
+              text = $("body").text();
+            }
+          }
+
+          // 공백 정리
+          text = text
+            .replace(/\s+/g, " ")
+            .replace(/\n\s*\n/g, "\n")
+            .trim();
+
+          // 길이 제한
+          if (text.length > maxChars) {
+            text = text.slice(0, maxChars) + "... (truncated)";
+          }
+
+          const title = $("title").text().trim() || "No title";
+          return `Title: ${title}\n\nContent:\n${text}`;
+        } catch (error) {
+          return `Error fetching URL: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      }
+
       default:
         return `Error: Unknown tool: ${name}`;
     }
@@ -1279,6 +1426,10 @@ export function getToolsDescription(modelId: ModelId): string {
 - spawn_agent: 복잡한 작업을 sub-agent에게 위임 (독립 실행)
 - list_agents: 활성 sub-agent 목록
 - cancel_agent: sub-agent 취소
+
+## 웹 검색/가져오기
+- web_search: Brave Search API로 웹 검색 (query, count)
+- web_fetch: URL에서 본문 텍스트 추출 (url, maxChars)
 
 허용된 경로: ${path.join(home, "Documents")}, ${path.join(home, "projects")}, 워크스페이스`;
 }
