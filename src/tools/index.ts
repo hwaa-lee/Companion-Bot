@@ -58,7 +58,7 @@ import {
 import { executeChangeModel } from "./model.js";
 
 // Re-export utilities for external use
-export { isPathAllowed, getAllowedPaths, DANGEROUS_PATTERNS } from "./pathCheck.js";
+export { isPathAllowed, getAllowedPaths, SENSITIVE_PATTERNS } from "./pathCheck.js";
 export { isPrivateIP, home } from "./utils.js";
 
 // Tool 정의 (Claude API 형식)

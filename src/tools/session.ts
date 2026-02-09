@@ -1,6 +1,6 @@
 /**
  * Session management for background commands
- * OpenClaw 스타일 보안 모델
+ * OpenClaw 스타일: 기본적으로 모든 명령 허용
  */
 
 import { spawn, ChildProcess } from "child_process";
@@ -12,12 +12,12 @@ import {
   SESSION_CLEANUP_INTERVAL_MS,
   SESSION_TTL_MS,
 } from "../utils/constants.js";
-import { getWorkspacePath } from "../workspace/index.js";
-import { isPathAllowed } from "./pathCheck.js";
 import * as path from "path";
-import * as fs from "fs";
 
 const execAsync = promisify(exec);
+
+// 홈 디렉토리
+const home = process.env.HOME || "";
 
 // ============== 세션 관리 ==============
 export interface ProcessSession {
@@ -40,7 +40,6 @@ const sessions = new Map<string, ProcessSession>();
 function cleanupStaleSessions(): void {
   const now = Date.now();
   for (const [id, session] of sessions) {
-    // 완료/에러/종료된 세션만 정리
     if (session.status !== "running" && session.endTime) {
       const age = now - session.endTime.getTime();
       if (age > SESSION_TTL_MS) {
@@ -56,181 +55,51 @@ setInterval(cleanupStaleSessions, SESSION_CLEANUP_INTERVAL_MS);
 function appendOutput(session: ProcessSession, data: string) {
   const lines = data.split("\n");
   session.outputBuffer.push(...lines);
-  // 버퍼 크기 제한
   if (session.outputBuffer.length > SESSION_MAX_OUTPUT_LINES) {
     session.outputBuffer = session.outputBuffer.slice(-SESSION_MAX_OUTPUT_LINES);
   }
 }
 
-// ============== OpenClaw 스타일 보안 ==============
-
-// 허용된 명령어 (basename)
-const ALLOWED_COMMANDS = new Set([
-  // 기본 유틸
-  "ls", "pwd", "cat", "head", "tail", "grep", "find", "wc",
-  "sort", "uniq", "diff", "echo", "date", "which", "env", "printenv",
-  // 개발 도구
-  "git", "npm", "npx", "node", "pnpm", "yarn", "bun",
-  // 텍스트 처리
-  "sed", "awk", "cut", "tr", "jq",
-]);
-
-// stdin-only로 안전하게 사용 가능한 명령 (OpenClaw safeBins)
-const SAFE_BINS = new Set([
-  "jq", "grep", "cut", "sort", "uniq", "head", "tail", "tr", "wc",
-]);
-
-// OpenClaw 스타일 파이프라인 토큰 차단
-const DISALLOWED_PIPELINE_TOKENS = [
-  ">",   // 리디렉션
-  "<",   // 입력 리디렉션
-  "`",   // 명령 치환
-  "\n",  // 줄바꿈
-  "\r",  // 캐리지 리턴
-  "(",   // 서브셸
-  ")",
-  "$(",  // 명령 치환
-  "${",  // 변수 확장
-];
-
-// 위험한 인자
-const DANGEROUS_ARGS = new Set([
-  "--force", "-rf", "--hard", "--no-preserve-root",
-  "-f", "--delete", "--remove",
-]);
-
-// 위험한 명령어 (절대 허용 안 함)
-const BLOCKED_COMMANDS = new Set([
-  "rm", "rmdir", "mv", "cp", "chmod", "chown", "chgrp",
-  "sudo", "su", "dd", "mkfs", "fdisk", "mount", "umount",
-  "kill", "killall", "pkill", "shutdown", "reboot", "halt",
-  "curl", "wget", // 네트워크 명령은 web_fetch로 대체
-]);
-
-// 안전한 환경 변수
-function getSafeEnv(): Record<string, string> {
-  return {
-    PATH: process.env.PATH || "",
-    HOME: process.env.HOME || "",
-    USER: process.env.USER || "",
-    LANG: process.env.LANG || "en_US.UTF-8",
-    TERM: process.env.TERM || "xterm",
-  };
-}
-
-// 명령어에서 basename 추출
-function extractCommandName(command: string): string | null {
-  const trimmed = command.trim();
-  const firstPart = trimmed.split(/\s+/)[0];
-  if (!firstPart) return null;
-  return path.basename(firstPart);
-}
-
-// 파이프라인 토큰 체크
-function containsDisallowedTokens(command: string): boolean {
-  return DISALLOWED_PIPELINE_TOKENS.some(token => command.includes(token));
-}
-
-// 체이닝 분리 (&&, ||, ;)
-function splitChainedCommands(command: string): string[] {
-  // 간단한 분리 (따옴표 내부는 무시 - 완벽하진 않지만 기본적인 케이스 커버)
-  return command.split(/\s*(?:&&|\|\||;)\s*/);
-}
-
-// 명령어 검증
-function validateCommand(command: string): { valid: boolean; error?: string } {
-  // 1. 위험한 토큰 차단
-  if (containsDisallowedTokens(command)) {
-    return { valid: false, error: "리디렉션, 치환, 서브셸은 사용할 수 없어" };
-  }
-
-  // 2. 체이닝된 각 명령어 검증
-  const commands = splitChainedCommands(command);
+// 환경 변수 (민감한 정보 제외)
+function getExecEnv(): Record<string, string> {
+  const env: Record<string, string> = { ...process.env } as Record<string, string>;
   
-  for (const cmd of commands) {
-    const cmdName = extractCommandName(cmd);
-    if (!cmdName) continue;
-
-    // 3. 블록된 명령어 체크
-    if (BLOCKED_COMMANDS.has(cmdName)) {
-      return { valid: false, error: `'${cmdName}'은 보안상 차단된 명령어야` };
-    }
-
-    // 4. 허용된 명령어 체크
-    if (!ALLOWED_COMMANDS.has(cmdName)) {
-      return { 
-        valid: false, 
-        error: `'${cmdName}'은 허용 목록에 없어. 허용: ${[...ALLOWED_COMMANDS].slice(0, 10).join(", ")}...` 
-      };
-    }
-
-    // 5. 위험한 인자 체크
-    const args = cmd.trim().split(/\s+/).slice(1);
-    for (const arg of args) {
-      if (DANGEROUS_ARGS.has(arg)) {
-        return { valid: false, error: `위험한 인자 '${arg}'는 사용할 수 없어` };
-      }
-    }
+  // 민감한 환경변수 제거
+  const sensitiveKeys = [
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "TELEGRAM_BOT_TOKEN",
+    "BRAVE_API_KEY",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_REFRESH_TOKEN",
+  ];
+  
+  for (const key of sensitiveKeys) {
+    delete env[key];
   }
-
-  return { valid: true };
+  
+  return env;
 }
 
-// cwd 검증 (workspace 내로 제한)
-function validateCwd(cwd: string): { valid: boolean; resolvedCwd: string; error?: string } {
-  const workspace = getWorkspacePath();
-  const resolved = path.resolve(cwd);
-
-  // workspace 또는 /tmp 내에 있어야 함
-  if (!isPathAllowed(resolved)) {
-    return { 
-      valid: false, 
-      resolvedCwd: workspace,
-      error: `작업 디렉토리는 workspace (${workspace}) 또는 /tmp 내에 있어야 해` 
-    };
-  }
-
-  // 디렉토리 존재 확인
-  try {
-    const stat = fs.statSync(resolved);
-    if (!stat.isDirectory()) {
-      return { valid: false, resolvedCwd: workspace, error: `'${cwd}'는 디렉토리가 아니야` };
-    }
-    return { valid: true, resolvedCwd: resolved };
-  } catch {
-    return { valid: false, resolvedCwd: workspace, error: `'${cwd}' 디렉토리를 찾을 수 없어` };
-  }
-}
-
-// run_command 실행
+// run_command 실행 - OpenClaw 스타일 (제한 없음)
 export async function executeRunCommand(input: Record<string, unknown>): Promise<string> {
   const command = input.command as string;
-  const requestedCwd = (input.cwd as string) || getWorkspacePath();
+  const cwd = (input.cwd as string) || home;
   const background = (input.background as boolean) || false;
   const timeout = ((input.timeout as number) || 30) * 1000;
 
-  // 1. 명령어 검증
-  const cmdValidation = validateCommand(command);
-  if (!cmdValidation.valid) {
-    return `Error: ${cmdValidation.error}`;
-  }
-
-  // 2. cwd 검증
-  const cwdValidation = validateCwd(requestedCwd);
-  if (!cwdValidation.valid) {
-    return `Error: ${cwdValidation.error}`;
-  }
-  const cwd = cwdValidation.resolvedCwd;
-
-  const safeEnv = getSafeEnv();
+  // cwd 존재 확인
+  const resolvedCwd = path.resolve(cwd);
+  
+  const execEnv = getExecEnv();
 
   // Background 실행
   if (background) {
     const sessionId = randomUUID().slice(0, 8);
     
     const child = spawn("sh", ["-c", command], {
-      cwd,
-      env: safeEnv,
+      cwd: resolvedCwd,
+      env: execEnv,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -239,14 +108,13 @@ export async function executeRunCommand(input: Record<string, unknown>): Promise
       id: sessionId,
       pid: child.pid!,
       command,
-      cwd,
+      cwd: resolvedCwd,
       startTime: new Date(),
       outputBuffer: [],
       process: child,
       status: "running",
     };
 
-    // stdout/stderr 캡처
     child.stdout?.on("data", (data: Buffer) => {
       appendOutput(session, data.toString());
     });
@@ -254,7 +122,6 @@ export async function executeRunCommand(input: Record<string, unknown>): Promise
       appendOutput(session, `[stderr] ${data.toString()}`);
     });
 
-    // 프로세스 종료 핸들링
     child.on("close", (code) => {
       session.endTime = new Date();
       session.exitCode = code;
@@ -266,29 +133,36 @@ export async function executeRunCommand(input: Record<string, unknown>): Promise
       appendOutput(session, `[error] ${err.message}`);
     });
 
-    // unref로 부모 프로세스와 분리
     child.unref();
-
     sessions.set(sessionId, session);
 
     return `백그라운드 세션 시작됨
 Session ID: ${sessionId}
 PID: ${child.pid}
 Command: ${command}
-CWD: ${cwd}
+CWD: ${resolvedCwd}
 
 manage_session으로 세션 관리 가능 (list/log/kill)`;
   }
 
-  // Foreground 실행 (기존 방식)
+  // Foreground 실행
   try {
     const { stdout, stderr } = await execAsync(command, {
-      cwd,
+      cwd: resolvedCwd,
       timeout,
-      env: safeEnv,
+      env: execEnv,
+      maxBuffer: 10 * 1024 * 1024, // 10MB
     });
     return stdout || stderr || "명령 실행 완료 (출력 없음)";
-  } catch (error) {
+  } catch (error: unknown) {
+    if (error && typeof error === "object" && "stdout" in error) {
+      // 명령이 실패해도 출력이 있으면 보여줌
+      const e = error as { stdout?: string; stderr?: string; message?: string };
+      const output = (e.stdout || "") + (e.stderr || "");
+      if (output) {
+        return `[exit code != 0]\n${output}`;
+      }
+    }
     return `Error: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
@@ -300,7 +174,6 @@ export function executeListSessions(input: Record<string, unknown>): string {
   const sessionList: string[] = [];
   
   for (const [id, session] of sessions) {
-    // 상태 필터링
     if (statusFilter !== "all") {
       if (statusFilter === "running" && session.status !== "running") continue;
       if (statusFilter === "completed" && session.status === "running") continue;
@@ -373,13 +246,11 @@ export function executeKillSession(input: Record<string, unknown>): string {
   }
 
   try {
-    // Process group kill (negative PID)
     process.kill(-session.pid, signal);
     session.status = "killed";
     session.endTime = new Date();
     return `세션 ${sessionId} (PID ${session.pid}) ${signal}로 종료됨`;
   } catch (error) {
-    // 단일 프로세스 kill 시도
     try {
       session.process.kill(signal);
       session.status = "killed";
