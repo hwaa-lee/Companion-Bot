@@ -28,59 +28,90 @@ async function question(rl: readline.Interface, prompt: string): Promise<string>
 async function interactiveSetup(): Promise<boolean> {
   const rl = createPrompt();
 
-  console.log("\n🤖 CompanionBot 첫 실행입니다!\n");
+  console.log(`
+╔═══════════════════════════════════════════════════════════════╗
+║             🤖 CompanionBot 첫 실행 가이드                    ║
+╚═══════════════════════════════════════════════════════════════╝
+
+안녕하세요! CompanionBot 설정을 시작합니다.
+2가지 키만 입력하면 바로 사용할 수 있어요.
+`);
 
   try {
     // Telegram Bot Token
-    console.log("[1/2] Telegram Bot Token");
-    console.log("      @BotFather에서 봇 생성 후 토큰을 붙여넣으세요.");
-    console.log("      (https://t.me/BotFather)\n");
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[1/2] Telegram Bot Token
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    const token = await question(rl, "      Token: ");
+📱 Telegram에서 봇을 만들어야 해요:
+
+   1. Telegram에서 @BotFather 검색해서 대화 시작
+   2. /newbot 명령어 입력
+   3. 봇 이름 입력 (예: My AI Assistant)
+   4. 봇 유저네임 입력 (예: my_ai_bot) - 반드시 _bot으로 끝나야 함
+   5. 토큰이 나오면 복사! (예: 123456:ABC-DEF...)
+
+   🔗 바로가기: https://t.me/BotFather
+`);
+
+    const token = await question(rl, "   Token을 붙여넣으세요: ");
     if (!token) {
-      console.log("\n❌ 토큰이 필요합니다.");
+      console.log("\n❌ 토큰이 필요합니다. 다시 실행해주세요.");
       rl.close();
       return false;
     }
 
     await setSecret("telegram-token", token);
-    console.log("      ✓ 저장됨\n");
+    console.log("   ✓ 저장됨 (OS 키체인에 안전하게 보관)\n");
 
     // Anthropic API Key
-    console.log("[2/2] Anthropic API Key");
-    console.log("      console.anthropic.com에서 발급받으세요.");
-    console.log("      (https://console.anthropic.com/settings/keys)\n");
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2/2] Anthropic API Key
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    const apiKey = await question(rl, "      API Key: ");
+🧠 AI 기능을 위해 Anthropic API 키가 필요해요:
+
+   1. https://console.anthropic.com 접속
+   2. 회원가입 또는 로그인
+   3. Settings > API Keys 메뉴
+   4. Create Key 버튼 클릭
+   5. 생성된 키 복사! (sk-ant-...)
+
+   💡 무료 크레딧이 있으니 먼저 사용해보세요!
+   🔗 바로가기: https://console.anthropic.com/settings/keys
+`);
+
+    const apiKey = await question(rl, "   API Key를 붙여넣으세요: ");
     if (!apiKey) {
-      console.log("\n❌ API 키가 필요합니다.");
+      console.log("\n❌ API 키가 필요합니다. 다시 실행해주세요.");
       rl.close();
       return false;
     }
 
     await setSecret("anthropic-api-key", apiKey);
-    console.log("      ✓ 저장됨\n");
+    console.log("   ✓ 저장됨 (OS 키체인에 안전하게 보관)\n");
 
     // 선택적 기능 설정
-    const setupOptional = await question(rl, "[선택] 추가 기능을 설정하시겠습니까? (y/n): ");
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[선택] 추가 기능
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
+    const setupOptional = await question(rl, "   웹 검색 기능을 설정하시겠습니까? (y/n): ");
 
     if (setupOptional.toLowerCase() === "y") {
-      console.log("");
-
-      // 날씨 기능
-      const useWeather = await question(rl, "      날씨 기능을 사용하시겠습니까? (y/n): ");
-
-      if (useWeather.toLowerCase() === "y") {
-        console.log("\n      OpenWeatherMap API Key가 필요합니다.");
-        console.log("      (https://openweathermap.org)\n");
-
-        const weatherKey = await question(rl, "      API Key: ");
-        if (weatherKey) {
-          await setSecret("openweathermap-api-key", weatherKey);
-          console.log("      ✓ 저장됨\n");
-        } else {
-          console.log("      → 건너뜀\n");
-        }
+      console.log(`
+   🔍 Brave Search API (무료 2000회/월):
+   
+      1. https://brave.com/search/api 접속
+      2. Get Started 클릭 후 가입
+      3. API 키 생성
+`);
+      const braveKey = await question(rl, "   Brave API Key (Enter로 건너뛰기): ");
+      if (braveKey) {
+        await setSecret("brave-api-key", braveKey);
+        console.log("   ✓ 저장됨\n");
+      } else {
+        console.log("   → 건너뜀 (나중에 companionbot setup brave <KEY>로 설정 가능)\n");
       }
     }
 
@@ -116,17 +147,38 @@ async function main() {
 
   // 3. 워크스페이스 초기화
   const workspaceReady = await isWorkspaceInitialized();
+  const workspacePath = getWorkspacePath();
+  
   if (!workspaceReady) {
-    console.log("📁 워크스페이스 생성 중...");
+    console.log(`
+╔═══════════════════════════════════════════════════════════════╗
+║                    📁 워크스페이스 생성                        ║
+╚═══════════════════════════════════════════════════════════════╝
+`);
     await initWorkspace();
-    console.log(`   → ${getWorkspacePath()} 생성 완료\n`);
+    console.log(`   경로: ${workspacePath}
+   
+   생성된 파일들:
+   ├── IDENTITY.md   ← 봇의 이름과 성격 설정
+   ├── SOUL.md       ← 봇의 행동 원칙
+   ├── USER.md       ← 당신에 대한 정보 (봇이 참고)
+   ├── AGENTS.md     ← 봇 행동 가이드
+   ├── MEMORY.md     ← 장기 기억 저장소
+   └── memory/       ← 일일 메모리 폴더
+
+   💡 팁: IDENTITY.md와 USER.md를 편집해서 봇을 커스터마이즈하세요!
+`);
   }
 
   // 4. 환경변수 설정
   process.env.ANTHROPIC_API_KEY = apiKey;
 
   // 5. 봇 시작
-  console.log("🚀 봇을 시작합니다!\n");
+  console.log(`
+╔═══════════════════════════════════════════════════════════════╗
+║                      🚀 봇 시작!                              ║
+╚═══════════════════════════════════════════════════════════════╝
+`);
 
   const bot = createBot(token);
 
@@ -146,8 +198,22 @@ async function main() {
 
   bot.start({
     onStart: (botInfo) => {
-      console.log(`✓ @${botInfo.username} 시작됨`);
-      console.log(`  텔레그램에서 대화를 시작하세요!\n`);
+      console.log(`   ✓ @${botInfo.username} 연결됨!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   이제 Telegram에서 @${botInfo.username} 검색해서 대화해보세요!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   📱 명령어 목록:
+   /help       - 도움말
+   /model      - AI 모델 변경 (haiku/sonnet/opus)
+   /compact    - 대화 요약 (토큰 절약)
+   /health     - 봇 상태 확인
+   /calendar   - 캘린더 연동 (Google)
+
+   ⌨️  Ctrl+C로 종료
+   📂 워크스페이스: ${workspacePath}
+`);
     },
   });
 }
