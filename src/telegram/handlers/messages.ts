@@ -71,7 +71,7 @@ export function registerMessageHandlers(bot: Bot): void {
 
         history.push({ role: "user", content: imageContent });
 
-        const systemPrompt = await buildSystemPrompt(modelId);
+        const systemPrompt = await buildSystemPrompt(modelId, history);
         const result = await chat(history, systemPrompt, modelId);
 
         history.push({ role: "assistant", content: result });
@@ -130,7 +130,7 @@ export function registerMessageHandlers(bot: Bot): void {
       history.push({ role: "user", content: enrichedMessage });
 
       try {
-        const systemPrompt = await buildSystemPrompt(modelId);
+        const systemPrompt = await buildSystemPrompt(modelId, history);
         const response = await chat(history, systemPrompt, modelId);
 
         history.push({ role: "assistant", content: response });

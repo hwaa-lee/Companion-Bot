@@ -56,6 +56,9 @@ import {
   ensureDefaultCronJobs,
 } from "../cron/index.js";
 import * as cheerio from "cheerio";
+import { embed } from '../memory/embeddings.js';
+import { search } from '../memory/vectorStore.js';
+import { reindexAll } from '../memory/indexer.js';
 
 const execAsync = promisify(exec);
 
@@ -857,6 +860,34 @@ Examples:
       },
       required: ["id"],
     },
+  },
+  // ============== 메모리 검색 ==============
+  {
+    name: "memory_search",
+    description: "Search through long-term memories using semantic similarity. Use this when the user asks about past conversations, events, or information that might be stored in memory.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query - what to look for in memories"
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of results (default: 5)"
+        }
+      },
+      required: ["query"]
+    }
+  },
+  {
+    name: "memory_reindex",
+    description: "Reindex all memory files. Use when memories seem outdated or after major memory updates.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: []
+    }
   },
 ];
 
@@ -1782,6 +1813,28 @@ Next run: ${nextRunStr}`;
         }
       }
 
+      // ============== 메모리 검색 ==============
+      case "memory_search": {
+        const query = input.query as string;
+        const limit = (input.limit as number) || 5;
+        
+        const queryEmbedding = await embed(query);
+        const results = await search(queryEmbedding, limit);
+        
+        if (results.length === 0) {
+          return "관련 기억을 찾지 못했어.";
+        }
+        
+        return results.map((r, i) => 
+          `[${i + 1}] (${r.source}, score: ${r.score.toFixed(2)})\n${r.text}`
+        ).join('\n\n---\n\n');
+      }
+
+      case "memory_reindex": {
+        const result = await reindexAll();
+        return `리인덱싱 완료: MEMORY.md ${result.main}개, 일일 메모리 ${result.daily}개 청크`;
+      }
+
       default:
         return `Error: Unknown tool: ${name}`;
     }
@@ -1860,6 +1913,10 @@ export function getToolsDescription(modelId: ModelId): string {
 - remove_cron: cron job 삭제 (id)
 - toggle_cron: cron job 활성화/비활성화 (id, enabled)
 - run_cron: cron job 즉시 실행 (id) - 테스트/수동 트리거용
+
+## 메모리 검색
+- memory_search: 장기 기억에서 시맨틱 검색 (query, limit)
+- memory_reindex: 메모리 파일 재인덱싱
 
 허용된 경로: ${path.join(home, "Documents")}, ${path.join(home, "projects")}, 워크스페이스`;
 }

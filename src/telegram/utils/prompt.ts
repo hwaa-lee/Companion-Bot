@@ -1,7 +1,9 @@
-import { MODELS, type ModelId } from "../../ai/claude.js";
-import { loadRecentMemories, getWorkspacePath } from "../../workspace/index.js";
+import { MODELS, type ModelId, type Message } from "../../ai/claude.js";
+import { getWorkspacePath } from "../../workspace/index.js";
 import { getToolsDescription } from "../../tools/index.js";
 import { getWorkspace } from "./cache.js";
+import { embed } from "../../memory/embeddings.js";
+import { search } from "../../memory/vectorStore.js";
 
 /**
  * identity.md에서 이름을 추출합니다.
@@ -17,6 +19,42 @@ export function extractName(identityContent: string | null): string | null {
     }
   }
   return null;
+}
+
+/**
+ * 최근 대화에서 검색 쿼리 컨텍스트를 추출합니다.
+ */
+function extractSearchContext(history: Message[]): string {
+  const recent = history.slice(-3);
+  return recent
+    .filter((m) => m.role === "user")
+    .map((m) => (typeof m.content === "string" ? m.content : ""))
+    .join(" ")
+    .slice(0, 500);
+}
+
+/**
+ * 대화 컨텍스트와 관련된 메모리를 검색합니다.
+ */
+async function getRelevantMemories(history: Message[]): Promise<string> {
+  try {
+    const context = extractSearchContext(history);
+    if (!context.trim()) return "";
+
+    const queryEmbedding = await embed(context);
+    const results = await search(queryEmbedding, 3, 0.4); // 상위 3개, 유사도 0.4 이상
+
+    if (results.length === 0) return "";
+
+    return (
+      "\n\n## 관련 기억\n" +
+      results
+        .map((r) => `- (${r.source}): ${r.text.slice(0, 200)}${r.text.length > 200 ? "..." : ""}`)
+        .join("\n")
+    );
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -47,8 +85,10 @@ function getKoreanDateTime(): { formatted: string; timezone: string } {
 
 /**
  * 시스템 프롬프트를 동적으로 생성합니다.
+ * @param modelId 사용할 모델 ID
+ * @param history 대화 히스토리 (관련 메모리 검색에 사용)
  */
-export async function buildSystemPrompt(modelId: ModelId): Promise<string> {
+export async function buildSystemPrompt(modelId: ModelId, history?: Message[]): Promise<string> {
   const model = MODELS[modelId];
   const workspace = await getWorkspace();
   const parts: string[] = [];
@@ -94,12 +134,14 @@ export async function buildSystemPrompt(modelId: ModelId): Promise<string> {
       parts.push(workspace.agents);
     }
 
-    // 최근 기억 로드
-    const recentMemories = await loadRecentMemories(3);
-    if (recentMemories.trim()) {
-      parts.push("---");
-      parts.push("# 최근 기억");
-      parts.push(recentMemories);
+    // 관련 기억 로드 (대화 컨텍스트 기반)
+    if (history && history.length > 0) {
+      const relevantMemories = await getRelevantMemories(history);
+      if (relevantMemories) {
+        parts.push("---");
+        parts.push("# 관련 기억");
+        parts.push(relevantMemories);
+      }
     }
 
     if (workspace.memory) {
