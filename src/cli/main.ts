@@ -50,8 +50,6 @@ CompanionBot은 Telegram에서 동작하는 개인 AI 비서예요.
 [STEP 1] 사용할 기능 선택
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-사용할 기능을 선택하세요. 선택한 기능에 필요한 API만 설정합니다.
-
 ┌──────────────────────────────────────────────────────────────┐
 │  [필수] 기본 기능 (자동 포함)                                │
 │  ├─ 💬 AI 대화         자연스러운 한국어 대화               │
@@ -59,7 +57,26 @@ CompanionBot은 Telegram에서 동작하는 개인 AI 비서예요.
 │  ├─ ⏰ 리마인더        알림 설정 ("3시에 알려줘")           │
 │  └─ 🧠 메모리          대화 기억, 장기 기억 저장            │
 └──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│  [선택] 추가 기능                                            │
+│                                                              │
+│  [1] 🔍 웹 검색      최신 정보 검색 (Brave API, 무료 2000/월)│
+│  [2] 📅 캘린더       Google Calendar 일정 확인/추가         │
+│  [3] 🌤️  날씨        현재 날씨, 브리핑 (OpenWeatherMap, 무료)│
+└──────────────────────────────────────────────────────────────┘
+
+   사용할 기능 번호를 입력하세요.
+   예: 1,3  또는  1 2 3  또는  all (모두 선택)
+   Enter만 누르면 기본 기능만 사용합니다.
 `);
+
+    const featureInput = await question(rl, "   선택 (q=취소): ");
+    if (featureInput.toLowerCase() === "q") {
+      console.log("\n👋 설정을 취소했습니다.");
+      rl.close();
+      return false;
+    }
 
     const features: FeatureSelection = {
       webSearch: false,
@@ -67,48 +84,25 @@ CompanionBot은 Telegram에서 동작하는 개인 AI 비서예요.
       weather: false,
     };
 
-    // 웹 검색
-    console.log("   🔍 웹 검색 - 최신 정보 검색 (Brave API 필요, 무료 2000회/월)");
-    const useWebSearch = await question(rl, "      사용하시겠습니까? (y/n, q=취소): ");
-    if (useWebSearch.toLowerCase() === "q") {
-      console.log("\n👋 설정을 취소했습니다.");
-      rl.close();
-      return false;
+    if (featureInput.toLowerCase() === "all") {
+      features.webSearch = true;
+      features.calendar = true;
+      features.weather = true;
+    } else {
+      const selections = featureInput.replace(/,/g, " ").split(/\s+/).filter(Boolean);
+      features.webSearch = selections.includes("1");
+      features.calendar = selections.includes("2");
+      features.weather = selections.includes("3");
     }
-    features.webSearch = useWebSearch.toLowerCase() === "y";
-    console.log(features.webSearch ? "      → 선택됨 ✓\n" : "      → 건너뜀\n");
-
-    // 캘린더
-    console.log("   📅 캘린더 연동 - Google Calendar 일정 확인/추가");
-    const useCalendar = await question(rl, "      사용하시겠습니까? (y/n, q=취소): ");
-    if (useCalendar.toLowerCase() === "q") {
-      console.log("\n👋 설정을 취소했습니다.");
-      rl.close();
-      return false;
-    }
-    features.calendar = useCalendar.toLowerCase() === "y";
-    console.log(features.calendar ? "      → 선택됨 ✓\n" : "      → 건너뜀\n");
-
-    // 날씨
-    console.log("   🌤️  날씨 - 현재 날씨, 브리핑 (OpenWeatherMap API 필요, 무료)");
-    const useWeather = await question(rl, "      사용하시겠습니까? (y/n, q=취소): ");
-    if (useWeather.toLowerCase() === "q") {
-      console.log("\n👋 설정을 취소했습니다.");
-      rl.close();
-      return false;
-    }
-    features.weather = useWeather.toLowerCase() === "y";
-    console.log(features.weather ? "      → 선택됨 ✓\n" : "      → 건너뜀\n");
 
     // 선택 요약
     const selectedFeatures = [];
-    if (features.webSearch) selectedFeatures.push("웹 검색");
-    if (features.calendar) selectedFeatures.push("캘린더");
-    if (features.weather) selectedFeatures.push("날씨");
+    if (features.webSearch) selectedFeatures.push("🔍 웹 검색");
+    if (features.calendar) selectedFeatures.push("📅 캘린더");
+    if (features.weather) selectedFeatures.push("🌤️ 날씨");
 
-    console.log(`┌──────────────────────────────────────────────────────────────┐
-│  선택된 기능: 기본 + ${selectedFeatures.length > 0 ? selectedFeatures.join(", ") : "(추가 기능 없음)"}
-└──────────────────────────────────────────────────────────────┘
+    console.log(`
+   ✓ 선택됨: ${selectedFeatures.length > 0 ? selectedFeatures.join(", ") : "기본 기능만"}
 `);
 
     // ===== STEP 2: 필수 API 키 =====
