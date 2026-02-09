@@ -1,5 +1,5 @@
 import type { Bot, Context } from "grammy";
-import { chat } from "../../ai/claude.js";
+import { chat, chatSmart, type Message, type ModelId } from "../../ai/claude.js";
 import {
   getHistory,
   getModel,
@@ -12,6 +12,66 @@ import {
   fetchWebContent,
   buildSystemPrompt,
 } from "../utils/index.js";
+
+/**
+ * 스트리밍 응답 전송 (Telegram 메시지 실시간 업데이트)
+ */
+async function sendStreamingResponse(
+  ctx: Context,
+  messages: Message[],
+  systemPrompt: string,
+  modelId: ModelId
+): Promise<string> {
+  // 1. 먼저 "..." 플레이스홀더 메시지 전송
+  const placeholder = await ctx.reply("...");
+  const chatId = ctx.chat!.id;
+  const messageId = placeholder.message_id;
+
+  let lastUpdate = Date.now();
+  const UPDATE_INTERVAL = 500; // 0.5초마다 업데이트 (Telegram rate limit 고려)
+  let lastText = "";
+
+  const result = await chatSmart(
+    messages,
+    systemPrompt,
+    modelId,
+    async (_chunk: string, accumulated: string) => {
+      const now = Date.now();
+      // 0.5초마다 또는 충분히 변경되었을 때 업데이트
+      if (now - lastUpdate > UPDATE_INTERVAL && accumulated !== lastText) {
+        try {
+          await ctx.api.editMessageText(chatId, messageId, accumulated + " ▌");
+          lastUpdate = now;
+          lastText = accumulated;
+        } catch {
+          // rate limit 등 무시
+        }
+      }
+    }
+  );
+
+  // 도구를 사용한 경우 스트리밍이 안됐으므로 새 응답 전송
+  if (result.usedTools) {
+    // placeholder 메시지를 최종 결과로 교체
+    try {
+      await ctx.api.editMessageText(chatId, messageId, result.text);
+    } catch {
+      // 실패시 새 메시지로 전송
+      await ctx.api.deleteMessage(chatId, messageId);
+      await ctx.reply(result.text);
+    }
+    return result.text;
+  }
+
+  // 최종 메시지 업데이트 (커서 제거)
+  try {
+    await ctx.api.editMessageText(chatId, messageId, result.text);
+  } catch {
+    // 이미 동일 텍스트면 에러 발생 가능 - 무시
+  }
+
+  return result.text;
+}
 
 /**
  * 메시지 핸들러들을 봇에 등록합니다.
@@ -137,14 +197,19 @@ export function registerMessageHandlers(bot: Bot): void {
 
       try {
         const systemPrompt = await buildSystemPrompt(modelId, history);
-        const response = await chat(history, systemPrompt, modelId);
+        
+        // 스트리밍 응답 사용 (실시간 업데이트)
+        const response = await sendStreamingResponse(
+          ctx,
+          history,
+          systemPrompt,
+          modelId
+        );
 
         history.push({ role: "assistant", content: response });
 
         // 토큰 기반 히스토리 트리밍
         trimHistoryByTokens(history);
-
-        await ctx.reply(response);
       } catch (error) {
         // 에러 시 방금 추가한 사용자 메시지 롤백 (히스토리 오염 방지)
         history.pop();

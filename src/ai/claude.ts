@@ -179,3 +179,107 @@ export async function chat(
 
   return textBlock?.text ?? "응답을 생성하지 못했어. 다시 시도해줄래?";
 }
+
+/**
+ * 스마트 채팅 - 가능하면 스트리밍, 도구 필요하면 일반 호출
+ * 
+ * 전략:
+ * - 먼저 스트리밍으로 시도
+ * - 도구 호출이 감지되면 (stop_reason === "tool_use") 기존 chat()으로 폴백
+ * - 스트리밍은 최종 텍스트 응답에만 사용
+ */
+export async function chatSmart(
+  messages: Message[],
+  systemPrompt: string,
+  modelId: ModelId,
+  onChunk?: (text: string, accumulated: string) => void | Promise<void>
+): Promise<{ text: string; usedTools: boolean }> {
+  // 스트리밍 콜백이 없으면 그냥 일반 chat 사용
+  if (!onChunk) {
+    const text = await chat(messages, systemPrompt, modelId);
+    return { text, usedTools: false };
+  }
+
+  const client = getClient();
+  const modelConfig = MODELS[modelId];
+
+  // 메시지를 API 형식으로 변환
+  const apiMessages: Anthropic.MessageParam[] = messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  // 스트리밍 요청 파라미터
+  const params: Anthropic.MessageCreateParamsStreaming = {
+    model: modelConfig.id,
+    max_tokens: modelConfig.maxTokens,
+    messages: apiMessages,
+    tools: tools,
+    stream: true,
+  };
+
+  if (systemPrompt) {
+    params.system = systemPrompt;
+  }
+
+  // Thinking은 스트리밍에서 복잡해지므로 일단 비활성화
+  // (도구 호출 폴백 시 chat()에서 thinking 사용됨)
+
+  let accumulated = "";
+  let stopReason: string | null = null;
+
+  try {
+    const stream = client.messages.stream(params);
+
+    // 스트리밍 이벤트 처리
+    stream.on("text", async (text) => {
+      accumulated += text;
+      try {
+        await onChunk(text, accumulated);
+      } catch (err) {
+        // editMessageText 실패 등은 무시하고 계속
+        console.warn("[Stream] Chunk callback error (ignored):", err);
+      }
+    });
+
+    // 스트림 완료 대기
+    const finalMessage = await stream.finalMessage();
+    stopReason = finalMessage.stop_reason;
+
+    // 도구 호출이 필요한 경우 - 일반 chat으로 폴백
+    if (stopReason === "tool_use") {
+      console.log("[Stream] Tool use detected, falling back to chat()");
+      const text = await chat(messages, systemPrompt, modelId);
+      return { text, usedTools: true };
+    }
+
+    // 성공적으로 스트리밍 완료
+    return { text: accumulated, usedTools: false };
+
+  } catch (error) {
+    // 스트리밍 에러 핸들링
+    if (error instanceof Anthropic.APIError) {
+      if (error.status === 429) {
+        throw new Error("API 요청이 너무 많아. 잠시 후 다시 시도해줘.");
+      }
+      if (error.status >= 500) {
+        throw new Error("AI 서버에 문제가 생겼어. 잠시 후 다시 시도해줘.");
+      }
+    }
+
+    // 연결 끊김 등 스트리밍 에러 - 이미 받은 내용이 있으면 반환 시도
+    if (accumulated.length > 50) {
+      console.warn("[Stream] Connection error, returning partial response");
+      return { text: accumulated + "\n\n(연결이 끊겨서 응답이 잘렸을 수 있어)", usedTools: false };
+    }
+
+    // 응답이 거의 없으면 일반 chat으로 재시도
+    console.warn("[Stream] Connection error, retrying with chat()");
+    try {
+      const text = await chat(messages, systemPrompt, modelId);
+      return { text, usedTools: false };
+    } catch (retryError) {
+      throw retryError;
+    }
+  }
+}
