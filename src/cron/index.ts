@@ -46,6 +46,7 @@ export {
   getCronJobs,
   getAllCronJobs,
   getActiveJobCount,
+  ensureDefaultCronJobs,
 } from "./scheduler.js";
 
 // Command handlers (for tools)

@@ -53,6 +53,7 @@ import {
   setCronJobEnabled,
   runCronJobNow,
   parseScheduleExpression,
+  ensureDefaultCronJobs,
 } from "../cron/index.js";
 import * as cheerio from "cheerio";
 
@@ -1174,6 +1175,12 @@ ${"─".repeat(40)}`;
 
         // BOOTSTRAP.md 삭제
         await deleteBootstrap();
+
+        // 기본 cron jobs 설정 (매일 12시 메모리 저장 등)
+        const chatId = getCurrentChatId();
+        if (chatId) {
+          await ensureDefaultCronJobs(chatId);
+        }
 
         return "Persona saved! BOOTSTRAP mode complete. I'm ready to chat with my new identity.";
       }

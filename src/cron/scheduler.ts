@@ -390,3 +390,39 @@ export function getActiveJobCount(): number {
   // For actual count, use getAllCronJobs and filter
   return 0; // Placeholder - will be updated by scheduler
 }
+
+// ============================================================
+// Default Cron Jobs
+// ============================================================
+
+const DEFAULT_CRON_JOBS = [
+  {
+    name: "daily_memory_save",
+    cronExpr: "0 12 * * *", // 매일 12시
+    command: "오늘 하루 동안 있었던 중요한 일들을 정리해서 MEMORY.md에 저장해줘. 새로운 정보, 대화 내용, 배운 것들 위주로.",
+    timezone: "Asia/Seoul",
+  },
+];
+
+/**
+ * Ensure default cron jobs exist for a chat
+ * Call this after onboarding or on /start
+ */
+export async function ensureDefaultCronJobs(chatId: number): Promise<void> {
+  const existingJobs = await getJobsByChat(chatId);
+  
+  for (const defaultJob of DEFAULT_CRON_JOBS) {
+    const exists = existingJobs.some(job => job.name === defaultJob.name);
+    
+    if (!exists) {
+      await createCronJob({
+        chatId,
+        name: defaultJob.name,
+        cronExpr: defaultJob.cronExpr,
+        command: defaultJob.command,
+        timezone: defaultJob.timezone,
+      });
+      console.log(`[Cron] Added default job: ${defaultJob.name} for chat ${chatId}`);
+    }
+  }
+}

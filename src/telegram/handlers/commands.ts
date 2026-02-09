@@ -64,6 +64,7 @@ import {
   buildSystemPrompt,
   extractName,
 } from "../utils/index.js";
+import { ensureDefaultCronJobs } from "../../cron/scheduler.js";
 
 export function registerCommands(bot: Bot): void {
   // /start 명령어
@@ -109,6 +110,9 @@ export function registerCommands(bot: Bot): void {
       // 일반 모드
       const workspace = await getWorkspace();
       const name = extractName(workspace.identity) || "CompanionBot";
+
+      // 기본 cron jobs 설정 확인
+      await ensureDefaultCronJobs(chatId);
 
       await ctx.reply(
         `안녕! ${name}이야.\n\n` +
