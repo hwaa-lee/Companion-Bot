@@ -2,6 +2,37 @@
 
 All notable changes to CompanionBot will be documented in this file.
 
+## [0.15.0] - 2025-02-09
+
+### 🧠 메모리 검색 개선
+- **도구 방식**: 매 메시지 자동 검색 → AI가 필요 시 `memory_search` 호출
+- **성능 향상**: 불필요한 벡터 검색 제거
+
+### 📦 코드 구조 개선
+- **tools 분할**: 1973줄 단일 파일 → 15개 모듈
+  - file.ts, web.ts, schedule.ts, session.ts
+  - memory.ts, agent.ts, weather.ts, model.ts
+
+### 🔒 안정성
+- **Agent 누수 방지**: 최대 10개 (chatId당 3개), TTL 30분
+
+### 📱 UX 개선
+- **/help 명령어**: 기능별 분류, 자연어 예시
+- **setMyCommands**: 주요 명령어 등록
+- **한국어 통일**: 에러 메시지, /model 응답
+
+## [0.14.0] - 2025-02-09
+
+### 🧠 Thinking 개선
+- **내부 스트리밍**: thinking 활성화 가능
+- **도구 사용 시**: 자동으로 thinking off (API 에러 방지)
+
+## [0.13.0] - 2025-02-09
+
+### 단순화
+- **스트리밍 제거**: 최종 응답만 한 번에 전송
+- **thinking 수정**: non-streaming에서 에러 발생하여 임시 비활성화
+
 ## [0.12.0] - 2025-02-09
 
 ### 💬 상태 피드백 개선
