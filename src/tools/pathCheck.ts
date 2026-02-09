@@ -25,12 +25,12 @@ export const DANGEROUS_PATTERNS = [
 
 /**
  * 허용된 디렉토리 목록 반환
+ * OpenClaw 스타일: 홈 디렉토리 전체 접근 가능
  */
 export function getAllowedPaths(): string[] {
   return [
-    path.join(home, "Documents"),
-    path.join(home, "projects"),
-    getWorkspacePath(),
+    home,  // 홈 디렉토리 전체
+    "/tmp",  // 임시 디렉토리
   ];
 }
 
