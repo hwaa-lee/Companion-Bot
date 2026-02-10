@@ -86,6 +86,17 @@ export interface Config {
   security: {
     resetTokenTtlMs: number;
   };
+
+  // PKM 설정
+  pkm?: {
+    enabled: boolean;
+    root: string;
+    classify: {
+      batchSize: number;
+      confidenceThreshold: number;
+      watcherDebounceMs: number;
+    };
+  };
 }
 
 // ============================================

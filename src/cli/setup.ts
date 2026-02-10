@@ -139,6 +139,33 @@ async function main() {
         console.log("사용법: npm run setup reset workspace");
       }
       break;
+    case "pkm": {
+      const { initPkmFolders, isPkmInitialized, getPkmRoot, listProjects } = await import("../pkm/index.js");
+      if (value === "status") {
+        const initialized = await isPkmInitialized();
+        if (initialized) {
+          const projects = await listProjects();
+          console.log(`\n📂 PKM 상태: ✓ 초기화됨`);
+          console.log(`   경로: ${getPkmRoot()}`);
+          console.log(`   활성 프로젝트: ${projects.length}개`);
+          if (projects.length > 0) {
+            for (const p of projects) {
+              console.log(`     • ${p.name}`);
+            }
+          }
+        } else {
+          console.log(`\n📂 PKM 상태: ✗ 미초기화`);
+          console.log(`   npm run setup pkm init 으로 초기화하세요.`);
+        }
+      } else if (value === "init") {
+        await initPkmFolders();
+        console.log(`✓ PKM PARA 폴더 구조 초기화 완료`);
+        console.log(`   경로: ${getPkmRoot()}`);
+      } else {
+        console.log(`사용법:\n  npm run setup pkm status   PKM 상태 확인\n  npm run setup pkm init     PKM 초기화`);
+      }
+      break;
+    }
     default:
       console.log(`
 CompanionBot 설정
@@ -152,6 +179,8 @@ CompanionBot 설정
   npm run setup delete <telegram|anthropic|brave|weather>   키 삭제
   npm run setup init                                        워크스페이스 초기화
   npm run setup reset workspace                             워크스페이스 리셋
+  npm run setup pkm status                                  PKM 상태 확인
+  npm run setup pkm init                                    PKM PARA 폴더 초기화
       `);
   }
 }

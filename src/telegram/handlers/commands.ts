@@ -486,12 +486,53 @@ export function registerCommands(bot: Bot): void {
       return;
     }
 
+    // PKM 설정
+    if (subcommand === "pkm" || subcommand === "문서관리") {
+      const { isPkmInitialized, getPkmRoot, listProjects } = await import("../../pkm/index.js");
+      const { PKM } = await import("../../config/constants.js");
+      const initialized = await isPkmInitialized();
+
+      if (action === "init" || action === "초기화") {
+        if (initialized) {
+          await ctx.reply(`PKM이 이미 초기화되어 있어요.\n경로: ${getPkmRoot()}`);
+        } else {
+          const { initPkmFolders } = await import("../../pkm/index.js");
+          await initPkmFolders();
+          await ctx.reply(`✅ PKM 초기화 완료!\n경로: ${getPkmRoot()}\n\n먼저 프로젝트를 만들어주세요:\n"프로젝트 만들어줘: 이름1, 이름2"`);
+        }
+        return;
+      }
+
+      const projects = initialized ? await listProjects() : [];
+      await ctx.reply(
+        `📂 PKM (문서 관리)\n\n` +
+        `상태: ${initialized ? "✓ 초기화됨" : "✗ 미초기화"}\n` +
+        `활성화: ${PKM.ENABLED ? "✓" : "✗"}\n` +
+        (initialized ? `경로: ${getPkmRoot()}\n프로젝트: ${projects.length}개\n` : "") +
+        `\n• 초기화: /setup pkm init\n` +
+        `• "파일 정리해줘"로 인박스 처리\n` +
+        `• "프로젝트 만들어줘"로 프로젝트 생성`
+      );
+      return;
+    }
+
     // 전체 기능 목록
     const weatherKey = await getSecret("openweathermap-api-key");
     const calendarConfigured = await isCalendarConfigured();
     const briefingConfig = await getBriefingConfig(chatId);
     const reminders = await getReminders(chatId);
     const heartbeatConfig = await getHeartbeatConfig(chatId);
+
+    // PKM 상태
+    let pkmStatus = "✗ 비활성화";
+    try {
+      const { isPkmInitialized } = await import("../../pkm/index.js");
+      const { PKM: pkmConfig } = await import("../../config/constants.js");
+      if (pkmConfig.ENABLED) {
+        const initialized = await isPkmInitialized();
+        pkmStatus = initialized ? "✓ 초기화됨" : "⏳ 미초기화";
+      }
+    } catch { /* PKM 모듈 로드 실패 무시 */ }
 
     const features = [
       {
@@ -518,6 +559,11 @@ export function registerCommands(bot: Bot): void {
         name: "💓 Heartbeat",
         status: heartbeatConfig?.enabled ? `✓ ${Math.floor(heartbeatConfig.intervalMs / 60000)}분` : "✗ 비활성화",
         command: "/setup heartbeat",
+      },
+      {
+        name: "📂 PKM",
+        status: pkmStatus,
+        command: "/setup pkm",
       },
     ];
 

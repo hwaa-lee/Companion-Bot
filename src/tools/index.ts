@@ -56,6 +56,13 @@ import {
   executeCancelAgent,
 } from "./agent.js";
 import { executeChangeModel } from "./model.js";
+import {
+  executePkmInbox,
+  executePkmSearch,
+  executePkmProject,
+  executePkmInit,
+  executePkmWatcher,
+} from "./pkm.js";
 
 // Re-export utilities for external use
 export { isPathAllowed, getAllowedPaths, SENSITIVE_PATTERNS } from "./pathCheck.js";
@@ -697,6 +704,97 @@ Examples:
       required: ["id"],
     },
   },
+  // ============== PKM (문서 관리) ==============
+  {
+    name: "pkm_inbox",
+    description: `인박스 파일 자동 분류. _Inbox/ 폴더의 파일들을 AI가 PARA 방법론에 따라 분류하고 정리한다.
+
+사용 시점:
+- "파일 정리해줘", "인박스 처리해" 등
+- file 파라미터 없으면 전체 인박스 처리
+- file 파라미터 있으면 해당 파일만 처리`,
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        file: {
+          type: "string",
+          description: "특정 파일 경로 (없으면 전체 인박스 처리)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "pkm_search",
+    description: `PKM 문서에서 검색. 벡터 유사도 + 키워드 하이브리드 검색으로 관련 문서를 찾는다.
+
+사용 시점:
+- "OO 관련 자료 찾아줘"
+- "이전에 저장한 XX 문서 보여줘"
+- "PKM에서 검색해줘"`,
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "검색할 내용",
+        },
+        limit: {
+          type: "number",
+          description: "최대 결과 수 (기본: 5)",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "pkm_project",
+    description: `프로젝트 관리 (PARA의 P). 프로젝트를 생성/목록/완료/복원/이름변경/조회한다.
+
+프로젝트는 파일 분류의 기준이 되므로, 파일을 분류하기 전에 먼저 프로젝트를 만들어야 한다.
+쉼표로 구분하면 여러 프로젝트를 한번에 생성할 수 있다.
+
+사용 시점:
+- "프로젝트 만들어줘: PoC_KSNET, FLAP_Phase2"
+- "프로젝트 목록 보여줘"
+- "프로젝트 완료 처리해줘"`,
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: {
+          type: "string",
+          enum: ["create", "list", "complete", "restore", "rename", "info"],
+          description: "수행할 작업",
+        },
+        name: {
+          type: "string",
+          description: "프로젝트 이름 (create 시 쉼표 구분 복수 생성 가능)",
+        },
+        new_name: {
+          type: "string",
+          description: "새 이름 (rename 시 필요)",
+        },
+        description: {
+          type: "string",
+          description: "프로젝트 설명 (create 시 선택)",
+        },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "pkm_init",
+    description: `PKM 시스템 초기화. PARA 폴더 구조를 생성하고 Obsidian vault 설정을 한다.
+
+사용 시점:
+- "문서 관리 시작할래", "PKM 켜줘"
+- 최초 1회만 실행하면 됨`,
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
   // ============== 메모리 검색 ==============
   {
     name: "memory_search",
@@ -830,6 +928,18 @@ export async function executeTool(
       case "run_cron":
         return await executeRunCron(input);
 
+      // PKM
+      case "pkm_inbox":
+        return await executePkmInbox(input);
+      case "pkm_search":
+        return await executePkmSearch(input);
+      case "pkm_project":
+        return await executePkmProject(input);
+      case "pkm_init":
+        return await executePkmInit(input);
+      case "pkm_watcher":
+        return await executePkmWatcher(input);
+
       default:
         return `Error: Unknown tool: ${name}`;
     }
@@ -919,6 +1029,14 @@ export function getToolsDescription(modelId: ModelId): string {
 ## 메모리 검색
 - memory_search: 장기 기억에서 시맨틱 검색 (query, limit)
 - memory_reindex: 메모리 파일 재인덱싱
+
+## PKM (문서 관리)
+- pkm_init: PARA 폴더 구조 초기화
+- pkm_inbox: 인박스 파일 자동 분류 (file 없으면 전체, 있으면 단일)
+- pkm_search: PKM 문서 검색 (벡터+키워드 하이브리드)
+- pkm_project: 프로젝트 관리
+  - action: create/list/complete/restore/rename/info
+  - name: 프로젝트 이름 (create 시 쉼표 구분 복수 생성)
 
 허용된 경로: ${path.join(home, "Documents")}, ${path.join(home, "projects")}, 워크스페이스`;
 

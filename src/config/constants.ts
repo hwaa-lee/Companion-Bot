@@ -90,3 +90,14 @@ export const SEARCH = {
   get TIMEOUT_MS() { return config().search.timeoutMs; },
   get EMBED_TIMEOUT_MS() { return config().search.embedTimeoutMs; },
 } as const;
+
+// ============================================
+// PKM 설정
+// ============================================
+export const PKM = {
+  get ENABLED() { return config().pkm?.enabled ?? false; },
+  get ROOT() { return config().pkm?.root ?? "~/.companionbot/pkm"; },
+  get BATCH_SIZE() { return config().pkm?.classify?.batchSize ?? 10; },
+  get CONFIDENCE_THRESHOLD() { return config().pkm?.classify?.confidenceThreshold ?? 0.8; },
+  get WATCHER_DEBOUNCE_MS() { return config().pkm?.classify?.watcherDebounceMs ?? 2000; },
+} as const;

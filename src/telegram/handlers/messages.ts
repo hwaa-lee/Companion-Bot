@@ -21,8 +21,10 @@ import {
   buildSystemPrompt,
 } from "../utils/index.js";
 import { estimateMessagesTokens } from "../../utils/tokens.js";
-import { TOKENS, TELEGRAM } from "../../config/constants.js";
+import { TOKENS, TELEGRAM, PKM } from "../../config/constants.js";
 import { formatErrorForUser, toUserFriendlyError } from "../../utils/retry.js";
+import * as fs from "fs/promises";
+import * as path from "path";
 
 /**
  * Typing indicator를 주기적으로 갱신하는 클래스
@@ -160,6 +162,60 @@ async function sendResponse(ctx: Context, text: string): Promise<void> {
  * 메시지 핸들러들을 봇에 등록합니다.
  */
 export function registerMessageHandlers(bot: Bot): void {
+  // 파일(문서) 수신 처리 → PKM _Inbox/ 저장
+  bot.on("message:document", async (ctx) => {
+    // PKM 비활성화 시 파일은 무시 (기존 동작 유지)
+    if (!PKM.ENABLED) return;
+
+    const chatId = ctx.chat.id;
+    const doc = ctx.message.document;
+
+    if (!doc.file_id || !doc.file_name) {
+      await ctx.reply("파일 정보를 가져올 수 없어요.");
+      return;
+    }
+
+    try {
+      // 파일 다운로드
+      const file = await ctx.api.getFile(doc.file_id);
+      if (!file.file_path) {
+        await ctx.reply("파일을 다운로드할 수 없어요.");
+        return;
+      }
+
+      const fileUrl = `https://api.telegram.org/file/bot${bot.token}/${file.file_path}`;
+      const response = await fetch(fileUrl);
+      const buffer = Buffer.from(await response.arrayBuffer());
+
+      // _Inbox/에 저장
+      const { getInboxPath, isPkmInitialized } = await import("../../pkm/index.js");
+      const initialized = await isPkmInitialized();
+      if (!initialized) {
+        await ctx.reply("📂 PKM이 아직 초기화되지 않았어요. \"문서 관리 시작할래\"라고 말해주세요.");
+        return;
+      }
+
+      const inboxPath = getInboxPath();
+      const targetPath = path.join(inboxPath, doc.file_name);
+      await fs.writeFile(targetPath, buffer);
+
+      const caption = ctx.message.caption || "";
+      const sizeMb = (buffer.length / (1024 * 1024)).toFixed(1);
+
+      await ctx.reply(
+        `📥 파일 수신: ${doc.file_name} (${sizeMb}MB)\n` +
+        `_Inbox/에 저장했어요. 곧 자동 분류됩니다.` +
+        (caption ? `\n\n메모: ${caption}` : "")
+      );
+
+      // 파일 감시자가 자동 처리하므로 여기서 직접 처리하지 않음
+      // (watcher의 디바운스로 처리됨)
+    } catch (error) {
+      console.error(`[Telegram:Document] chatId=${chatId} error:`, error);
+      await ctx.reply("파일 저장 중 오류가 발생했어요. 다시 시도해주세요.");
+    }
+  });
+
   // 사진 메시지 처리
   bot.on("message:photo", async (ctx) => {
     const chatId = ctx.chat.id;

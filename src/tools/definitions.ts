@@ -277,6 +277,50 @@ export const compactTools = [
       required: ["identity", "soul", "user"],
     },
   },
+
+  // === PKM (문서 관리) ===
+  {
+    name: "pkm_inbox",
+    description: "인박스 파일 분류. file 없으면 전체 처리, file 있으면 단일 파일 처리",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        file: { type: "string", description: "단일 파일 경로 (선택)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "pkm_search",
+    description: "PKM 문서 검색 (벡터+키워드 하이브리드)",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "검색어" },
+        limit: { type: "number", description: "결과 수 (기본: 5)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "pkm_project",
+    description: "프로젝트 관리: create/list/complete/restore/rename/info",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["create", "list", "complete", "restore", "rename", "info"] },
+        name: { type: "string", description: "프로젝트 이름" },
+        new_name: { type: "string", description: "새 이름 (rename)" },
+        description: { type: "string", description: "프로젝트 설명 (create)" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "pkm_init",
+    description: "PKM PARA 폴더 구조 초기화",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
 ];
 
 // 도구 수 비교
@@ -331,5 +375,13 @@ export const toolActionMap: Record<string, Record<string, string>> = {
     spawn: "spawn_agent",
     list: "list_agents",
     cancel: "cancel_agent",
+  },
+  pkm_project: {
+    create: "pkm_project",
+    list: "pkm_project",
+    complete: "pkm_project",
+    restore: "pkm_project",
+    rename: "pkm_project",
+    info: "pkm_project",
   },
 };

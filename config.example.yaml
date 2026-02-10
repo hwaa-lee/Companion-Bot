@@ -120,3 +120,19 @@ search:
 security:
   # 리셋 토큰 만료 ms (기본: 60000 = 1분)
   resetTokenTtlMs: 60000
+
+# ============================================
+# PKM 설정 (문서 관리)
+# ============================================
+pkm:
+  # PKM 기능 활성화 (기본: false)
+  enabled: false
+  # PKM 루트 경로 (기본: ~/.companionbot/pkm)
+  root: "~/.companionbot/pkm"
+  classify:
+    # AI 분류 배치 크기 (기본: 10)
+    batchSize: 10
+    # 1단계→2단계 넘어가는 신뢰도 기준 (기본: 0.8)
+    confidenceThreshold: 0.8
+    # 파일 감시 디바운스 ms (기본: 2000)
+    watcherDebounceMs: 2000

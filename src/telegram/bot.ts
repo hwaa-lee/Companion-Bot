@@ -7,6 +7,7 @@ import { setAgentBot } from "../agents/index.js";
 import { setCronBot, restoreCronJobs } from "../cron/index.js";
 import { registerCommands, registerMessageHandlers } from "./handlers/index.js";
 import { warmup } from "../warmup.js";
+import { PKM } from "../config/constants.js";
 
 // Re-export for external use
 export { invalidateWorkspaceCache } from "./utils/index.js";
@@ -27,20 +28,40 @@ async function initializeInBackground(bot: Bot): Promise<void> {
   setAgentBot(bot);
   setCronBot(bot);
 
+  // PKM 초기화 (활성화된 경우)
+  const pkmInit = PKM.ENABLED
+    ? import("../pkm/index.js").then(async (pkm) => {
+        await pkm.initPkmFolders();
+        // 인박스 감시 시작
+        const { processSingleFile } = pkm;
+        pkm.startWatcher(pkm.getInboxPath(), async (filePath: string) => {
+          try {
+            await processSingleFile(filePath);
+          } catch (err) {
+            console.error("[PKM:Watcher] 파일 처리 실패:", err);
+          }
+        });
+        console.log("[PKM] 초기화 + 감시 시작 완료");
+      })
+    : Promise.resolve();
+
   // 모든 비동기 초기화를 병렬로 수행
   const results = await Promise.allSettled([
     // 🚀 Warmup (임베딩 모델 + 워크스페이스 + 메모리)
     warmup(),
-    
+
     // 📋 Restore 작업들 (서로 독립적이므로 병렬 가능)
     restoreReminders(),
     restoreBriefings(),
     restoreHeartbeats(),
     restoreCronJobs(),
+
+    // 📂 PKM (활성화 시)
+    pkmInit,
   ]);
 
   // 에러 로깅 (치명적이지 않음)
-  const taskNames = ["warmup", "reminders", "briefings", "heartbeats", "cron"];
+  const taskNames = ["warmup", "reminders", "briefings", "heartbeats", "cron", "pkm"];
   for (const [idx, result] of results.entries()) {
     if (result.status === "rejected") {
       console.error(`[Init] Failed to ${taskNames[idx]}:`, result.reason);

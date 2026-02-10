@@ -154,6 +154,61 @@ export async function indexConversation(
 }
 
 /**
+ * PKM 문서 인덱싱
+ * PARA 폴더 내 마크다운 파일들을 FTS에 인덱싱한다.
+ */
+export async function indexPkmDocuments(): Promise<number> {
+  let totalChunks = 0;
+
+  try {
+    // 동적 import (PKM 미사용 시 로드 안 함)
+    const { getPkmRoot, isPkmInitialized } = await import("../pkm/init.js");
+
+    const initialized = await isPkmInitialized();
+    if (!initialized) return 0;
+
+    const pkmRoot = getPkmRoot();
+    const paraFolders = ["1_Project", "2_Area", "3_Resource", "4_Archive"];
+
+    for (const folder of paraFolders) {
+      const folderPath = path.join(pkmRoot, folder);
+      try {
+        totalChunks += await indexPkmFolder(folderPath, `pkm:${folder}`);
+      } catch {
+        // 폴더 없음 무시
+      }
+    }
+
+    console.log(`[Indexer] PKM indexed: ${totalChunks} chunks`);
+  } catch {
+    // PKM 모듈 없으면 무시
+  }
+
+  return totalChunks;
+}
+
+/**
+ * PKM 폴더 재귀 인덱싱 (마크다운만)
+ */
+async function indexPkmFolder(dirPath: string, sourcePrefix: string): Promise<number> {
+  let total = 0;
+  const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+
+    if (entry.isDirectory() && !entry.name.startsWith(".") && !entry.name.startsWith("_")) {
+      total += await indexPkmFolder(fullPath, `${sourcePrefix}/${entry.name}`);
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      const source = `pkm:${entry.name.replace(".md", "")}`;
+      total += await indexFile(fullPath, source);
+    }
+  }
+
+  return total;
+}
+
+/**
  * 전체 리인덱싱 (벡터 + FTS 모두)
  */
 export async function reindexAll(): Promise<{ total: number; sources: string[]; ftsCount: number }> {
@@ -183,11 +238,15 @@ export async function reindexAll(): Promise<{ total: number; sources: string[]; 
     sourceCounts.set(chunk.source, (sourceCounts.get(chunk.source) || 0) + 1);
   }
 
+  // 5. PKM 문서 인덱싱
+  const pkmChunks = await indexPkmDocuments();
+  const totalWithPkm = chunks.length + pkmChunks;
+
   const ftsCount = getDocumentCount();
-  console.log(`[Indexer] Indexed ${chunks.length} chunks to vector store, ${ftsCount} documents to FTS`);
+  console.log(`[Indexer] Indexed ${totalWithPkm} chunks (${pkmChunks} from PKM), ${ftsCount} documents to FTS`);
 
   return {
-    total: chunks.length,
+    total: totalWithPkm,
     sources: Array.from(sourceCounts.keys()),
     ftsCount,
   };
