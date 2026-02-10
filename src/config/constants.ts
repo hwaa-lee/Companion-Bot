@@ -22,19 +22,19 @@ export const SESSION = {
 // ============================================
 export const TOKENS = {
   /** Claude 최대 컨텍스트 토큰 */
-  MAX_CONTEXT: 100000,
+  MAX_CONTEXT: 200000,
   
   /** 히스토리 토큰 한도 */
-  MAX_HISTORY: 40000,
+  MAX_HISTORY: 80000,
   
   /** 이 이상이면 자동 요약 시작 */
-  SUMMARY_THRESHOLD: 25000,
+  SUMMARY_THRESHOLD: 50000,
   
   /** 핀 맥락 최대 토큰 */
-  MAX_PINNED: 5000,
+  MAX_PINNED: 10000,
   
-  /** 자동 압축 시작 비율 (0.35 = 35%) */
-  COMPACTION_THRESHOLD: 0.35,
+  /** 자동 압축 시작 비율 (0.50 = 50%) */
+  COMPACTION_THRESHOLD: 0.50,
   
   /** compact 스킵 기준 토큰 */
   COMPACT_MIN_TOKENS: 5000,

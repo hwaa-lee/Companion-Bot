@@ -356,10 +356,15 @@ export function toUserFriendlyError(error: unknown): UserFriendlyError {
 /**
  * 에러를 사용자에게 보여줄 문자열로 변환합니다.
  */
-export function formatErrorForUser(error: unknown): string {
+export function formatErrorForUser(error: unknown, showTechnical = true): string {
   const friendly = toUserFriendlyError(error);
-  if (friendly.suggestedAction) {
-    return `${friendly.userMessage} ${friendly.suggestedAction}`;
+  let msg = friendly.userMessage;
+  
+  // 기술적 에러 정보 추가 (디버깅용)
+  if (showTechnical && friendly.technicalMessage) {
+    const shortTech = friendly.technicalMessage.slice(0, 100);
+    msg += `\n\n🔧 상세: ${shortTech}${friendly.technicalMessage.length > 100 ? "..." : ""}`;
   }
-  return friendly.userMessage;
+  
+  return msg;
 }
