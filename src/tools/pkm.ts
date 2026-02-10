@@ -70,11 +70,16 @@ export async function executePkmSearch(input: Record<string, unknown>): Promise<
   const query = input.query as string;
   const limit = (input.limit as number) || 5;
 
-  const results = await hybridSearch(query, {
-    topK: limit,
-    sources: ["pkm"],
+  // PKM 소스 필터는 post-filter로 처리 (DB 소스명이 "pkm:<경로>" 형태)
+  const rawResults = await hybridSearch(query, {
+    topK: limit * 3, // post-filter 여유분
     useTrigram: true,
   });
+
+  // "pkm:" 접두사로 PKM 문서만 필터링
+  const results = rawResults
+    .filter(r => r.source.startsWith("pkm:"))
+    .slice(0, limit);
 
   if (results.length === 0) {
     return "관련 문서를 찾지 못했어요.";
@@ -83,14 +88,14 @@ export async function executePkmSearch(input: Record<string, unknown>): Promise<
   const lines: string[] = [`🔍 "${query}" 검색 결과 (${results.length}건)`, ""];
 
   for (const [i, r] of results.entries()) {
+    const filePath = r.source.replace(/^pkm:/, "");
     const preview = r.text.slice(0, 200).replace(/\n/g, " ");
-    lines.push(`[${i + 1}] (${r.source}, score: ${r.score.toFixed(2)})`);
+    lines.push(`[${i + 1}] ${filePath} (score: ${r.score.toFixed(2)})`);
     lines.push(`  ${preview}${r.text.length > 200 ? "..." : ""}`);
     lines.push("");
   }
 
-  // 필요 시 원본 파일 읽기 안내
-  lines.push("💡 원본 전체를 보려면 read_file 도구로 파일을 읽어주세요.");
+  lines.push("💡 원본 전체를 보려면 위 경로로 read_file 도구를 사용해주세요.");
 
   return lines.join("\n");
 }

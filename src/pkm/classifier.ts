@@ -55,6 +55,7 @@ interface Stage1Item {
   tags: string[];
   confidence: number;
   project?: string;
+  targetFolder?: string;
 }
 
 /** Stage 2 응답 */
@@ -62,7 +63,7 @@ interface Stage2Item {
   para: ParaCategory;
   tags: string[];
   summary: string;
-  targetPath: string;
+  targetFolder: string;
   project?: string;
 }
 
@@ -114,12 +115,14 @@ ${fileList}
     "para": "project" | "area" | "resource" | "archive",
     "tags": ["태그1", "태그2"],
     "confidence": 0.0~1.0,
-    "project": "프로젝트명 (project일 때만, 아니면 생략)"
+    "project": "프로젝트명 (project일 때만, 아니면 생략)",
+    "targetFolder": "하위 폴더명 (예: DevOps, 회의록, 건강관리 등. 최상위에 놓으려면 빈 문자열)"
   }
 ]
 
 각 파일에 대해 정확히 하나의 객체를 반환하세요. tags는 최대 5개, 한국어 또는 영어 혼용 가능합니다.
-confidence는 분류 확신도입니다 (0.0=모름, 1.0=확실).`;
+confidence는 분류 확신도입니다 (0.0=모름, 1.0=확실).
+targetFolder는 PARA 폴더 아래의 하위 폴더명입니다. PARA 접두사(1_Project 등)를 포함하지 마세요.`;
 }
 
 /** Stage 2: 정밀 분류 프롬프트 */
@@ -151,12 +154,12 @@ ${content}
   "para": "project" | "area" | "resource" | "archive",
   "tags": ["태그1", "태그2", ...],
   "summary": "문서 내용을 2~3문장으로 요약",
-  "targetPath": "PARA 카테고리에 맞는 추천 하위 폴더 경로 (예: 3_Resource/DevOps)",
+  "targetFolder": "하위 폴더명 (예: DevOps, 회의록). PARA 접두사 포함하지 말 것",
   "project": "관련 프로젝트명 (project일 때만, 아니면 생략)"
 }
 
 tags는 최대 5개, summary는 한국어로 작성하세요.
-targetPath는 PARA 폴더 구조(1_Project, 2_Area, 3_Resource, 4_Archive) 아래의 상대 경로입니다.`;
+targetFolder는 PARA 폴더(1_Project, 2_Area, 3_Resource, 4_Archive) 아래의 하위 폴더명입니다. PARA 접두사(1_Project, 2_Area, 3_Resource, 4_Archive)를 포함하지 마세요. 예: "DevOps", "회의록" (O) / "3_Resource/DevOps" (X)`;
 }
 
 // ============================================
@@ -207,6 +210,7 @@ async function classifyBatchStage1(
             tags: Array.isArray(item.tags) ? item.tags.slice(0, 5) : [],
             confidence: clampConfidence(item.confidence),
             project: item.project || undefined,
+            targetFolder: typeof item.targetFolder === "string" ? stripParaPrefix(item.targetFolder) : undefined,
           });
         }
       }
@@ -248,7 +252,7 @@ async function classifySingleStage2(
     para: "resource",
     tags: [],
     summary: "",
-    targetPath: "3_Resource",
+    targetFolder: "",
     project: undefined,
   };
 
@@ -267,11 +271,17 @@ async function classifySingleStage2(
     const parsed = parseJsonSafe<Stage2Item>(text);
 
     if (parsed && isValidPara(parsed.para)) {
+      // AI가 targetFolder 또는 legacy targetPath를 반환할 수 있음
+      const rawFolder = typeof parsed.targetFolder === "string"
+        ? parsed.targetFolder
+        : typeof (parsed as any).targetPath === "string"
+          ? (parsed as any).targetPath
+          : "";
       return {
         para: parsed.para,
         tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5) : [],
         summary: typeof parsed.summary === "string" ? parsed.summary : "",
-        targetPath: typeof parsed.targetPath === "string" ? parsed.targetPath : paraToFolder(parsed.para),
+        targetFolder: stripParaPrefix(rawFolder),
         project: parsed.project || undefined,
       };
     }
@@ -353,7 +363,7 @@ export async function classifyFiles(
         para: s2.para,
         tags: s2.tags,
         summary: s2.summary,
-        targetFolder: s2.targetPath,
+        targetFolder: s2.targetFolder,
         project: s2.project,
         confidence: 1.0, // Stage 2를 거쳤으므로 높은 신뢰도
       };
@@ -367,7 +377,7 @@ export async function classifyFiles(
         para: s1.para,
         tags: s1.tags,
         summary: "", // Stage 1에서는 요약 미제공
-        targetFolder: paraToFolder(s1.para),
+        targetFolder: stripParaPrefix(s1.targetFolder || ""),
         project: s1.project,
         confidence: s1.confidence,
       };
@@ -414,6 +424,17 @@ function paraToFolder(para: ParaCategory): string {
     case "archive":
       return "4_Archive";
   }
+}
+
+/**
+ * AI 응답에서 PARA 접두사(1_Project, 2_Area 등)를 제거한다.
+ * "3_Resource/DevOps" → "DevOps", "DevOps" → "DevOps", "" → ""
+ */
+function stripParaPrefix(folder: string): string {
+  const trimmed = folder.trim();
+  // PARA 접두사 패턴: "1_Project/", "2_Area/", "3_Resource/", "4_Archive/"
+  const stripped = trimmed.replace(/^[1-4]_(?:Project|Area|Resource|Archive)\/?/i, "");
+  return stripped;
 }
 
 /** 유효한 PARA 카테고리인지 확인한다 */

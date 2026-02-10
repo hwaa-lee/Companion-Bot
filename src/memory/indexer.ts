@@ -189,8 +189,9 @@ export async function indexPkmDocuments(): Promise<number> {
 
 /**
  * PKM 폴더 재귀 인덱싱 (마크다운만)
+ * source에 실제 파일 경로를 저장하여 검색 결과에서 경로 확인 가능
  */
-async function indexPkmFolder(dirPath: string, sourcePrefix: string): Promise<number> {
+async function indexPkmFolder(dirPath: string, _sourcePrefix: string): Promise<number> {
   let total = 0;
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
@@ -198,9 +199,10 @@ async function indexPkmFolder(dirPath: string, sourcePrefix: string): Promise<nu
     const fullPath = path.join(dirPath, entry.name);
 
     if (entry.isDirectory() && !entry.name.startsWith(".") && !entry.name.startsWith("_")) {
-      total += await indexPkmFolder(fullPath, `${sourcePrefix}/${entry.name}`);
+      total += await indexPkmFolder(fullPath, `${_sourcePrefix}/${entry.name}`);
     } else if (entry.isFile() && entry.name.endsWith(".md")) {
-      const source = `pkm:${entry.name.replace(".md", "")}`;
+      // source = "pkm:<파일절대경로>" → 검색 결과에서 파일 경로 직접 확인 가능
+      const source = `pkm:${fullPath}`;
       total += await indexFile(fullPath, source);
     }
   }

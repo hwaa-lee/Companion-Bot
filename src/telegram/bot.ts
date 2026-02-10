@@ -7,7 +7,7 @@ import { setAgentBot } from "../agents/index.js";
 import { setCronBot, restoreCronJobs } from "../cron/index.js";
 import { registerCommands, registerMessageHandlers } from "./handlers/index.js";
 import { warmup } from "../warmup.js";
-import { PKM } from "../config/constants.js";
+import { PKM, TELEGRAM } from "../config/constants.js";
 
 // Re-export for external use
 export { invalidateWorkspaceCache } from "./utils/index.js";
@@ -34,11 +34,12 @@ async function initializeInBackground(bot: Bot): Promise<void> {
         await pkm.initPkmFolders();
         // 인박스 감시 시작
         const { processSingleFile } = pkm;
+        const { indexPkmDocuments } = await import("../memory/indexer.js");
         pkm.startWatcher(pkm.getInboxPath(), async (filePath: string) => {
-          try {
-            await processSingleFile(filePath);
-          } catch (err) {
-            console.error("[PKM:Watcher] 파일 처리 실패:", err);
+          const result = await processSingleFile(filePath);
+          // 분류 성공 시 인덱싱 갱신
+          if (result.classified > 0) {
+            try { await indexPkmDocuments(); } catch { /* 인덱싱 실패 무시 */ }
           }
         });
         console.log("[PKM] 초기화 + 감시 시작 완료");
@@ -86,6 +87,18 @@ export function createBot(token: string): Bot {
   // 첫 메시지가 오기 전에 warmup이 완료되면 첫 응답 지연 없음
   initializeInBackground(bot).catch((err) => {
     console.error("[Init] Background initialization failed:", err);
+  });
+
+  // chatId 접근 제어 (allowedChatIds가 설정된 경우만 적용)
+  bot.use(async (ctx, next) => {
+    const allowed = TELEGRAM.ALLOWED_CHAT_IDS;
+    if (allowed.length > 0 && ctx.chat) {
+      if (!allowed.includes(ctx.chat.id)) {
+        console.warn(`[Auth] Unauthorized chatId=${ctx.chat.id} blocked`);
+        return; // 무응답 (존재를 알리지 않음)
+      }
+    }
+    await next();
   });
 
   // Rate limiting - 1분에 10개 메시지

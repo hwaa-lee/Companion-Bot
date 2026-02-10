@@ -60,6 +60,7 @@ export interface Config {
 
   // 텔레그램 설정
   telegram: {
+    allowedChatIds: number[];
     maxMessageLength: number;
     maxImageSizeMb: number;
     maxUrlFetch: number;
@@ -144,6 +145,7 @@ const DEFAULT_CONFIG: Config = {
   },
 
   telegram: {
+    allowedChatIds: [],
     maxMessageLength: 4096,
     maxImageSizeMb: 10,
     maxUrlFetch: 3,

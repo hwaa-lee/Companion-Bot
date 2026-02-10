@@ -63,6 +63,7 @@ export const TELEGRAM = {
   get MAX_URL_FETCH() { return config().telegram.maxUrlFetch; },
   get CALENDAR_PREVIEW_COUNT() { return config().telegram.calendarPreviewCount; },
   get TYPING_REFRESH_MS() { return config().telegram.typingRefreshMs; },
+  get ALLOWED_CHAT_IDS(): number[] { return config().telegram?.allowedChatIds ?? []; },
 } as const;
 
 // ============================================

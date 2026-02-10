@@ -20,8 +20,9 @@ let watcher: FSWatcher | null = null;
 /** 파일별 디바운스 타이머 */
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-/** 이미 처리된 파일 (중복 방지) */
+/** 이미 처리된 파일 (중복 방지) — 최대 1000개로 제한 */
 const processedFiles = new Set<string>();
+const MAX_PROCESSED_FILES = 1000;
 
 // ============================================
 // 무시 규칙
@@ -86,7 +87,7 @@ async function isFileStable(filePath: string): Promise<boolean> {
  */
 export function startWatcher(
   inboxPath: string,
-  onNewFile: (filePath: string) => void,
+  onNewFile: (filePath: string) => Promise<void> | void,
   debounceMs?: number,
 ): void {
   // 이미 감시 중이면 먼저 정리
@@ -105,6 +106,11 @@ export function startWatcher(
     console.warn("[PKM:Watcher] 폴더가 생성되면 다시 시도해주세요.");
     return;
   }
+
+  // 기존 파일 스캔 (봇 재시작 시 누락 방지)
+  scanExistingFiles(inboxPath, onNewFile).catch((err) => {
+    console.error("[PKM:Watcher] 기존 파일 스캔 실패:", err);
+  });
 
   try {
     watcher = watch(inboxPath, { recursive: false }, (eventType, filename) => {
@@ -142,10 +148,15 @@ export function startWatcher(
 
           // 이미 처리된 파일 확인 (같은 세션 내 중복 방지)
           if (processedFiles.has(filePath)) return;
-          processedFiles.add(filePath);
 
           console.log(`[PKM:Watcher] 새 파일 감지: ${filename}`);
-          onNewFile(filePath);
+          try {
+            await onNewFile(filePath);
+            // 성공 시에만 processedFiles에 추가 (실패 시 재시도 가능)
+            markProcessed(filePath);
+          } catch (err) {
+            console.error(`[PKM:Watcher] 파일 처리 실패 (재시도 가능): ${filename}`, err);
+          }
         } catch (err) {
           // 파일이 삭제되었거나 접근 불가 - 무시
           if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -177,6 +188,44 @@ export function startWatcher(
   } catch (err) {
     console.error("[PKM:Watcher] 감시 시작 실패:", err);
     watcher = null;
+  }
+}
+
+/**
+ * processedFiles에 추가 (메모리 누수 방지: 최대 크기 제한)
+ */
+function markProcessed(filePath: string): void {
+  if (processedFiles.size >= MAX_PROCESSED_FILES) {
+    // 가장 오래된 항목 제거 (Set은 삽입 순서 유지)
+    const oldest = processedFiles.values().next().value;
+    if (oldest) processedFiles.delete(oldest);
+  }
+  processedFiles.add(filePath);
+}
+
+/**
+ * 봇 시작 시 _Inbox/에 이미 존재하는 파일을 처리한다.
+ */
+async function scanExistingFiles(
+  inboxPath: string,
+  onNewFile: (filePath: string) => Promise<void> | void,
+): Promise<void> {
+  const entries = await fs.readdir(inboxPath, { withFileTypes: true });
+  const existingFiles = entries
+    .filter(e => e.isFile() && !shouldIgnore(e.name))
+    .map(e => path.join(inboxPath, e.name));
+
+  if (existingFiles.length === 0) return;
+
+  console.log(`[PKM:Watcher] 기존 파일 ${existingFiles.length}개 처리 시작`);
+  for (const filePath of existingFiles) {
+    if (processedFiles.has(filePath)) continue;
+    try {
+      await onNewFile(filePath);
+      markProcessed(filePath);
+    } catch (err) {
+      console.error(`[PKM:Watcher] 기존 파일 처리 실패: ${path.basename(filePath)}`, err);
+    }
   }
 }
 

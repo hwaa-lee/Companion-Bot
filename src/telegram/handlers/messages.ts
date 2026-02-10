@@ -196,7 +196,13 @@ export function registerMessageHandlers(bot: Bot): void {
       }
 
       const inboxPath = getInboxPath();
-      const targetPath = path.join(inboxPath, doc.file_name);
+      // 파일명 sanitize: path traversal 방지 + 파일시스템 안전 문자만 허용
+      const safeName = path.basename(doc.file_name).replace(/[<>:"|?*]/g, "_");
+      if (!safeName || safeName === "." || safeName === "..") {
+        await ctx.reply("파일명이 유효하지 않아요.");
+        return;
+      }
+      const targetPath = path.join(inboxPath, safeName);
       await fs.writeFile(targetPath, buffer);
 
       const caption = ctx.message.caption || "";

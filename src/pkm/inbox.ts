@@ -7,7 +7,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { getInboxPath, getParaPath, getProjectsPath, getProjectContext } from "./init.js";
-import { extract, isBinaryFile, companionMdPath } from "./extract.js";
+import { extract, isBinaryFile } from "./extract.js";
 import { classifyFiles, type ClassifyInput, type ClassifyResult } from "./classifier.js";
 import { createDefault, stringify, inject, parse, type Frontmatter } from "./frontmatter.js";
 import { linkRelatedNotes } from "./linker.js";
@@ -104,12 +104,11 @@ export async function processInbox(): Promise<InboxResult> {
         tags: cls.tags,
       });
 
-      // 관련 노트 링크 (바이너리 동반 파일 또는 마크다운)
+      // 관련 노트 링크 (moveAndTag는 바이너리든 텍스트든 항상 .md 경로를 반환)
       try {
-        const mdPath = isBinaryFile(cls.filePath) ? companionMdPath(targetPath) : targetPath;
-        const mdContent = await fs.readFile(mdPath, "utf-8").catch(() => "");
+        const mdContent = await fs.readFile(targetPath, "utf-8").catch(() => "");
         if (mdContent) {
-          await linkRelatedNotes(mdPath, mdContent);
+          await linkRelatedNotes(targetPath, mdContent);
         }
       } catch {
         // 링크 실패는 무시 (분류는 성공)
@@ -165,12 +164,11 @@ export async function processSingleFile(filePath: string): Promise<InboxResult> 
       tags: cls.tags,
     });
 
-    // 관련 노트 링크
+    // 관련 노트 링크 (moveAndTag는 항상 .md 경로를 반환)
     try {
-      const mdPath = isBinaryFile(filePath) ? companionMdPath(targetPath) : targetPath;
-      const mdContent = await fs.readFile(mdPath, "utf-8").catch(() => "");
+      const mdContent = await fs.readFile(targetPath, "utf-8").catch(() => "");
       if (mdContent) {
-        await linkRelatedNotes(mdPath, mdContent);
+        await linkRelatedNotes(targetPath, mdContent);
       }
     } catch {
       // 링크 실패 무시
