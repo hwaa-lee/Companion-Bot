@@ -749,7 +749,7 @@ Examples:
   },
   {
     name: "pkm_project",
-    description: `프로젝트 관리 (PARA의 P). 프로젝트를 생성/목록/완료/복원/이름변경/조회한다.
+    description: `프로젝트 관리 (PARA의 P). 프로젝트를 생성/목록/완료/복원/이름변경/삭제/조회한다.
 
 프로젝트는 파일 분류의 기준이 되므로, 파일을 분류하기 전에 먼저 프로젝트를 만들어야 한다.
 쉼표로 구분하면 여러 프로젝트를 한번에 생성할 수 있다.
@@ -757,13 +757,14 @@ Examples:
 사용 시점:
 - "프로젝트 만들어줘: PoC_KSNET, FLAP_Phase2"
 - "프로젝트 목록 보여줘"
-- "프로젝트 완료 처리해줘"`,
+- "프로젝트 완료 처리해줘"
+- "프로젝트 삭제해줘"`,
     input_schema: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["create", "list", "complete", "restore", "rename", "info"],
+          enum: ["create", "list", "complete", "restore", "rename", "delete", "info"],
           description: "수행할 작업",
         },
         name: {

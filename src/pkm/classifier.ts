@@ -84,10 +84,26 @@ function getClient(): Anthropic {
 // 프롬프트 템플릿 (한국어)
 // ============================================
 
+/** 기존 하위폴더 목록을 프롬프트용 문자열로 포맷한다 */
+function formatSubfolderContext(subfolders: Record<string, string[]>): string {
+  const lines: string[] = [];
+  if (subfolders.area.length > 0) {
+    lines.push(`2_Area 기존 폴더: ${subfolders.area.join(", ")}`);
+  }
+  if (subfolders.resource.length > 0) {
+    lines.push(`3_Resource 기존 폴더: ${subfolders.resource.join(", ")}`);
+  }
+  if (subfolders.archive.length > 0) {
+    lines.push(`4_Archive 기존 폴더: ${subfolders.archive.join(", ")}`);
+  }
+  return lines.length > 0 ? lines.join("\n") : "기존 하위 폴더 없음";
+}
+
 /** Stage 1: 빠른 배치 분류 프롬프트 */
 function buildStage1Prompt(
   files: Array<{ fileName: string; preview: string }>,
   projectContext: string,
+  subfolderContext: string,
 ): string {
   const fileList = files
     .map((f, i) => `[${i}] 파일명: ${f.fileName}\n미리보기: ${f.preview}`)
@@ -97,6 +113,9 @@ function buildStage1Prompt(
 
 ## 활성 프로젝트 목록
 ${projectContext}
+
+## 기존 하위 폴더
+${subfolderContext}
 
 ## 분류 규칙
 - project: 마감일, 체크리스트, 액션 아이템이 있거나, 위 활성 프로젝트와 직접 관련된 문서
@@ -122,7 +141,8 @@ ${fileList}
 
 각 파일에 대해 정확히 하나의 객체를 반환하세요. tags는 최대 5개, 한국어 또는 영어 혼용 가능합니다.
 confidence는 분류 확신도입니다 (0.0=모름, 1.0=확실).
-targetFolder는 PARA 폴더 아래의 하위 폴더명입니다. PARA 접두사(1_Project 등)를 포함하지 마세요.`;
+targetFolder는 PARA 폴더 아래의 하위 폴더명입니다. PARA 접두사(1_Project 등)를 포함하지 마세요.
+⚠️ 같은 주제의 기존 폴더가 있으면 반드시 그 폴더명을 그대로 사용하세요.`;
 }
 
 /** Stage 2: 정밀 분류 프롬프트 */
@@ -130,11 +150,15 @@ function buildStage2Prompt(
   fileName: string,
   content: string,
   projectContext: string,
+  subfolderContext: string,
 ): string {
   return `당신은 PARA 방법론 기반 문서 분류 전문가입니다. 이 문서를 정밀하게 분석해주세요.
 
 ## 활성 프로젝트 목록
 ${projectContext}
+
+## 기존 하위 폴더
+${subfolderContext}
 
 ## 분류 규칙
 - project: 마감일, 체크리스트, 액션 아이템이 있거나, 위 활성 프로젝트와 직접 관련된 문서. 반드시 관련 프로젝트명을 project 필드에 기재.
@@ -159,7 +183,8 @@ ${content}
 }
 
 tags는 최대 5개, summary는 한국어로 작성하세요.
-targetFolder는 PARA 폴더(1_Project, 2_Area, 3_Resource, 4_Archive) 아래의 하위 폴더명입니다. PARA 접두사(1_Project, 2_Area, 3_Resource, 4_Archive)를 포함하지 마세요. 예: "DevOps", "회의록" (O) / "3_Resource/DevOps" (X)`;
+targetFolder는 PARA 폴더(1_Project, 2_Area, 3_Resource, 4_Archive) 아래의 하위 폴더명입니다. PARA 접두사(1_Project, 2_Area, 3_Resource, 4_Archive)를 포함하지 마세요. 예: "DevOps", "회의록" (O) / "3_Resource/DevOps" (X)
+⚠️ 같은 주제의 기존 폴더가 있으면 반드시 그 폴더명을 그대로 사용하세요.`;
 }
 
 // ============================================
@@ -173,6 +198,7 @@ targetFolder는 PARA 폴더(1_Project, 2_Area, 3_Resource, 4_Archive) 아래의 
 async function classifyBatchStage1(
   files: ClassifyInput[],
   projectContext: string,
+  subfolderContext: string,
 ): Promise<Map<string, Stage1Item>> {
   const anthropic = getClient();
   const results = new Map<string, Stage1Item>();
@@ -183,7 +209,7 @@ async function classifyBatchStage1(
     preview: f.content.slice(0, PREVIEW_LENGTH),
   }));
 
-  const prompt = buildStage1Prompt(previews, projectContext);
+  const prompt = buildStage1Prompt(previews, projectContext, subfolderContext);
 
   try {
     const response = await anthropic.messages.create({
@@ -243,9 +269,10 @@ async function classifyBatchStage1(
 async function classifySingleStage2(
   file: ClassifyInput,
   projectContext: string,
+  subfolderContext: string,
 ): Promise<Stage2Item> {
   const anthropic = getClient();
-  const prompt = buildStage2Prompt(file.fileName, file.content, projectContext);
+  const prompt = buildStage2Prompt(file.fileName, file.content, projectContext, subfolderContext);
 
   // 기본값 (API 실패 시 폴백)
   const fallback: Stage2Item = {
@@ -309,11 +336,16 @@ async function classifySingleStage2(
 export async function classifyFiles(
   files: ClassifyInput[],
   projectContext: string,
+  existingSubfolders?: Record<string, string[]>,
 ): Promise<ClassifyResult[]> {
   if (files.length === 0) return [];
 
   const batchSize = PKM.BATCH_SIZE;
   const confidenceThreshold = PKM.CONFIDENCE_THRESHOLD;
+  const subfolderContext = formatSubfolderContext(existingSubfolders ?? { area: [], resource: [], archive: [] });
+
+  // 프로젝트 이름 목록 수집 (fuzzy matching 용)
+  const projectNames = extractProjectNames(projectContext);
 
   console.log(`[Classifier] 분류 시작: ${files.length}개 파일, 배치 크기=${batchSize}, 임계값=${confidenceThreshold}`);
 
@@ -323,7 +355,7 @@ export async function classifyFiles(
 
   for (let i = 0; i < batches.length; i++) {
     console.log(`[Classifier] Stage 1 배치 ${i + 1}/${batches.length} (${batches[i].length}개 파일)`);
-    const batchResults = await classifyBatchStage1(batches[i], projectContext);
+    const batchResults = await classifyBatchStage1(batches[i], projectContext, subfolderContext);
 
     // 결과 병합
     for (const [key, value] of batchResults) {
@@ -345,7 +377,7 @@ export async function classifyFiles(
     // Stage 2는 개별 호출 (전체 본문 전달)
     for (const file of uncertainFiles) {
       console.log(`[Classifier] Stage 2 분류 중: ${file.fileName}`);
-      const result = await classifySingleStage2(file, projectContext);
+      const result = await classifySingleStage2(file, projectContext, subfolderContext);
       stage2Results.set(file.fileName, result);
     }
   }
@@ -364,7 +396,7 @@ export async function classifyFiles(
         tags: s2.tags,
         summary: s2.summary,
         targetFolder: s2.targetFolder,
-        project: s2.project,
+        project: s2.project ? fuzzyMatchProject(s2.project, projectNames) : undefined,
         confidence: 1.0, // Stage 2를 거쳤으므로 높은 신뢰도
       };
     }
@@ -378,7 +410,7 @@ export async function classifyFiles(
         tags: s1.tags,
         summary: "", // Stage 1에서는 요약 미제공
         targetFolder: stripParaPrefix(s1.targetFolder || ""),
-        project: s1.project,
+        project: s1.project ? fuzzyMatchProject(s1.project, projectNames) : undefined,
         confidence: s1.confidence,
       };
     }
@@ -451,6 +483,48 @@ function isValidPara(value: unknown): value is ParaCategory {
 function clampConfidence(value: unknown): number {
   const num = typeof value === "number" ? value : 0;
   return Math.max(0, Math.min(1, num));
+}
+
+/**
+ * 프로젝트 컨텍스트 문자열에서 프로젝트 이름 목록을 추출한다.
+ */
+function extractProjectNames(projectContext: string): string[] {
+  const names: string[] = [];
+  for (const line of projectContext.split("\n")) {
+    const match = line.match(/^- ([^:]+)/);
+    if (match) names.push(match[1].trim());
+  }
+  return names;
+}
+
+/**
+ * AI가 반환한 프로젝트명을 실제 폴더명과 매칭한다.
+ * 정규화(공백→언더스코어, 대소문자 무시)하여 가장 유사한 프로젝트명을 반환.
+ */
+function fuzzyMatchProject(aiProjectName: string, projectNames: string[]): string {
+  if (projectNames.length === 0) return aiProjectName;
+
+  // 정확히 일치하면 바로 반환
+  if (projectNames.includes(aiProjectName)) return aiProjectName;
+
+  // 정규화: 소문자 + 공백/하이픈을 언더스코어로
+  const normalize = (s: string) => s.toLowerCase().replace(/[\s\-]+/g, "_");
+  const normalizedAi = normalize(aiProjectName);
+
+  for (const name of projectNames) {
+    if (normalize(name) === normalizedAi) return name;
+  }
+
+  // 포함 관계로 매칭 (예: "PoC KSNET" ↔ "PoC_KSNET_2024")
+  for (const name of projectNames) {
+    const normName = normalize(name);
+    if (normName.includes(normalizedAi) || normalizedAi.includes(normName)) {
+      return name;
+    }
+  }
+
+  // 매칭 실패 시 원래 이름 반환
+  return aiProjectName;
 }
 
 /**

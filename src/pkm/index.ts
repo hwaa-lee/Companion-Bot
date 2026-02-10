@@ -18,6 +18,7 @@ export {
   createProjectsBatch,
   listProjects,
   getProjectContext,
+  getExistingSubfolders,
   ONBOARDING_MESSAGES,
 } from "./init.js";
 
@@ -73,6 +74,7 @@ export {
   completeProject,
   restoreProject,
   renameProject,
+  deleteProject,
   getProjectInfo,
   listAllProjects,
 } from "./project.js";

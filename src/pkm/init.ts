@@ -8,6 +8,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { PKM } from "../config/constants.js";
 import { getWorkspacePath } from "../workspace/paths.js";
+import { parse } from "./frontmatter.js";
 
 // ============================================
 // 경로 유틸리티
@@ -126,16 +127,31 @@ export async function isPkmInitialized(): Promise<boolean> {
 // ============================================
 
 /**
+ * 프로젝트 이름을 검증한다.
+ * path traversal, 파일시스템 안전하지 않은 문자를 방지.
+ */
+function validateProjectName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("프로젝트 이름이 비어있습니다.");
+  if (trimmed === "." || trimmed === "..") throw new Error("유효하지 않은 프로젝트 이름입니다.");
+  if (trimmed.includes("/") || trimmed.includes("\\")) throw new Error("프로젝트 이름에 경로 구분자를 사용할 수 없습니다.");
+  if (/[<>:"|?*]/.test(trimmed)) throw new Error("프로젝트 이름에 특수문자(<>:\"|?*)를 사용할 수 없습니다.");
+  if (trimmed.startsWith(".")) throw new Error("프로젝트 이름이 '.'으로 시작할 수 없습니다.");
+  return trimmed;
+}
+
+/**
  * 프로젝트 폴더와 인덱스 노트를 생성한다.
  */
 export async function createProject(name: string, description?: string): Promise<string> {
-  const projectDir = path.join(getProjectsPath(), name);
+  const safeName = validateProjectName(name);
+  const projectDir = path.join(getProjectsPath(), safeName);
   const assetsDir = path.join(projectDir, "_Assets");
 
   await fs.mkdir(projectDir, { recursive: true });
   await fs.mkdir(assetsDir, { recursive: true });
 
-  const indexPath = path.join(projectDir, `${name}.md`);
+  const indexPath = path.join(projectDir, `${safeName}.md`);
 
   try {
     await fs.access(indexPath);
@@ -144,14 +160,16 @@ export async function createProject(name: string, description?: string): Promise
   } catch {
     // 인덱스 노트 생성
     const today = new Date().toISOString().split("T")[0];
+    // YAML frontmatter의 summary에서 따옴표 이스케이프
+    const safeSummary = (description || "").replace(/"/g, '\\"');
     const content = `---
 para: project
 tags: []
 created: ${today}
 status: active
-summary: "${description || ""}"
+summary: "${safeSummary}"
 source: original
-project: ${name}
+project: ${safeName}
 ---
 
 ## 목적
@@ -162,7 +180,7 @@ ${description || ""}
 `;
 
     await fs.writeFile(indexPath, content);
-    console.log(`[PKM] 프로젝트 생성: ${name}`);
+    console.log(`[PKM] 프로젝트 생성: ${safeName}`);
     return indexPath;
   }
 }
@@ -170,10 +188,10 @@ ${description || ""}
 /**
  * 여러 프로젝트를 일괄 생성한다.
  */
-export async function createProjectsBatch(names: string[]): Promise<string[]> {
+export async function createProjectsBatch(names: string[], description?: string): Promise<string[]> {
   const paths: string[] = [];
   for (const name of names) {
-    const p = await createProject(name.trim());
+    const p = await createProject(name.trim(), description);
     paths.push(p);
   }
   return paths;
@@ -237,11 +255,9 @@ export async function getProjectContext(): Promise<string> {
   for (const proj of projects) {
     try {
       const content = await fs.readFile(proj.indexPath, "utf-8");
-      // frontmatter에서 summary와 tags 추출
-      const summaryMatch = content.match(/summary:\s*"?([^"\n]+)"?/);
-      const tagsMatch = content.match(/tags:\s*\[([^\]]*)\]/);
-      const summary = summaryMatch?.[1] || "";
-      const tags = tagsMatch?.[1] || "";
+      const { frontmatter } = parse(content);
+      const summary = String(frontmatter.summary ?? "");
+      const tags = Array.isArray(frontmatter.tags) ? frontmatter.tags.join(", ") : "";
       lines.push(`- ${proj.name}: ${summary} [${tags}]`);
     } catch {
       lines.push(`- ${proj.name}`);
@@ -249,4 +265,35 @@ export async function getProjectContext(): Promise<string> {
   }
 
   return lines.join("\n");
+}
+
+/**
+ * ARA 폴더(2_Area, 3_Resource, 4_Archive)의 기존 하위폴더 목록을 반환한다.
+ * 분류기에 전달하여 같은 주제의 파일이 기존 폴더로 분류되도록 한다.
+ */
+export async function getExistingSubfolders(): Promise<Record<string, string[]>> {
+  const result: Record<string, string[]> = {
+    area: [],
+    resource: [],
+    archive: [],
+  };
+
+  const mappings: Array<[string, string]> = [
+    ["area", getAreaPath()],
+    ["resource", getResourcePath()],
+    ["archive", getArchivePath()],
+  ];
+
+  for (const [key, dirPath] of mappings) {
+    try {
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+      result[key] = entries
+        .filter(e => e.isDirectory() && !e.name.startsWith(".") && !e.name.startsWith("_"))
+        .map(e => e.name);
+    } catch {
+      // 폴더 없으면 빈 배열
+    }
+  }
+
+  return result;
 }

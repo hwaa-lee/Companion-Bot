@@ -306,24 +306,73 @@ export async function listAllProjects(): Promise<ProjectInfo[]> {
     return [];
   }
 
-  for (const entry of entries) {
-    // 디렉토리만, 숨김/특수 폴더 제외
-    if (!entry.isDirectory()) continue;
-    if (entry.name.startsWith(".") || entry.name.startsWith("_")) continue;
+  const dirNames = entries
+    .filter(e => e.isDirectory() && !e.name.startsWith(".") && !e.name.startsWith("_"))
+    .map(e => e.name);
 
-    try {
-      const info = await getProjectInfo(entry.name);
-      projects.push(info);
-    } catch (err) {
-      // 개별 프로젝트 읽기 실패 시 건너뜀
+  const results = await Promise.allSettled(
+    dirNames.map(name => getProjectInfo(name))
+  );
+
+  for (const [idx, result] of results.entries()) {
+    if (result.status === "fulfilled") {
+      projects.push(result.value);
+    } else {
       console.warn(
-        `[PKM:Project] 프로젝트 정보 읽기 실패 (${entry.name}):`,
-        err,
+        `[PKM:Project] 프로젝트 정보 읽기 실패 (${dirNames[idx]}):`,
+        result.reason,
       );
     }
   }
 
   return projects;
+}
+
+// ============================================
+// 프로젝트 삭제
+// ============================================
+
+/**
+ * 프로젝트를 삭제한다 (1_Project/ 또는 4_Archive/ 에서).
+ * 폴더와 모든 내용이 영구 삭제된다.
+ *
+ * @param name - 프로젝트 이름 (폴더명)
+ * @returns 성공 메시지
+ */
+export async function deleteProject(name: string): Promise<string> {
+  // 1_Project에서 먼저 찾기
+  let targetDir = path.join(getProjectsPath(), name);
+  let location = "1_Project";
+
+  try {
+    const stat = await fs.stat(targetDir);
+    if (!stat.isDirectory()) throw new Error("not a directory");
+  } catch {
+    // 4_Archive에서 찾기
+    targetDir = path.join(getArchivePath(), name);
+    location = "4_Archive";
+
+    try {
+      const stat = await fs.stat(targetDir);
+      if (!stat.isDirectory()) {
+        throw new Error(`${name}은(는) 디렉토리가 아닙니다`);
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(
+          `[PKM:Project] 프로젝트를 찾을 수 없습니다: ${name}\n` +
+            `1_Project/ 와 4_Archive/ 모두 확인했습니다.`,
+        );
+      }
+      throw err;
+    }
+  }
+
+  await fs.rm(targetDir, { recursive: true, force: true });
+
+  const msg = `[PKM:Project] 프로젝트 삭제: ${name} (${location}/)`;
+  console.log(msg);
+  return msg;
 }
 
 // ============================================

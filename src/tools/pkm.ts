@@ -21,6 +21,7 @@ import {
   completeProject,
   restoreProject,
   renameProject,
+  deleteProject,
   getProjectInfo,
   listAllProjects,
   getPkmRoot,
@@ -158,6 +159,13 @@ export async function executePkmProject(input: Record<string, unknown>): Promise
       return `✅ "${oldName}" → "${newName}" 이름 변경 완료`;
     }
 
+    case "delete": {
+      const name = input.name as string;
+      if (!name) return "프로젝트 이름을 입력해주세요.";
+      await deleteProject(name);
+      return `🗑️ "${name}" 프로젝트가 삭제되었어요. (폴더와 모든 내용이 영구 삭제됨)`;
+    }
+
     case "info": {
       const name = input.name as string;
       if (!name) return "프로젝트 이름을 입력해주세요.";
@@ -173,7 +181,7 @@ export async function executePkmProject(input: Record<string, unknown>): Promise
     }
 
     default:
-      return `알 수 없는 액션: ${action}\n사용 가능: create, list, complete, restore, rename, info`;
+      return `알 수 없는 액션: ${action}\n사용 가능: create, list, complete, restore, rename, delete, info`;
   }
 }
 

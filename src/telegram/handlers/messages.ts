@@ -184,7 +184,15 @@ export function registerMessageHandlers(bot: Bot): void {
       }
 
       const fileUrl = `https://api.telegram.org/file/bot${bot.token}/${file.file_path}`;
-      const response = await fetch(fileUrl);
+      let response: Response;
+      try {
+        response = await fetch(fileUrl);
+      } catch (fetchErr) {
+        // 토큰 노출 방지: fileUrl을 로그에 쓰지 않음
+        console.error(`[Telegram:Document] chatId=${chatId} file download failed`);
+        await ctx.reply("파일 다운로드에 실패했어요. 다시 시도해주세요.");
+        return;
+      }
       const buffer = Buffer.from(await response.arrayBuffer());
 
       // _Inbox/에 저장
@@ -255,9 +263,9 @@ export function registerMessageHandlers(bot: Bot): void {
           return;
         }
 
-        // 파일 다운로드
-        const fileUrl = `https://api.telegram.org/file/bot${bot.token}/${file.file_path}`;
-        const response = await fetch(fileUrl);
+        // 파일 다운로드 (토큰 노출 방지: fileUrl을 로그에 쓰지 않음)
+        const photoUrl = `https://api.telegram.org/file/bot${bot.token}/${file.file_path}`;
+        const response = await fetch(photoUrl);
         const buffer = await response.arrayBuffer();
         const base64 = Buffer.from(buffer).toString("base64");
 

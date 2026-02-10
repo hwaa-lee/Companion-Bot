@@ -6,7 +6,7 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import { getInboxPath, getParaPath, getProjectsPath, getProjectContext } from "./init.js";
+import { getInboxPath, getParaPath, getProjectsPath, getProjectContext, getExistingSubfolders } from "./init.js";
 import { extract, isBinaryFile } from "./extract.js";
 import { classifyFiles, type ClassifyInput, type ClassifyResult } from "./classifier.js";
 import { createDefault, stringify, inject, parse, type Frontmatter } from "./frontmatter.js";
@@ -67,8 +67,11 @@ export async function processInbox(): Promise<InboxResult> {
   result.total = files.length;
   console.log(`[PKM:Inbox] ${files.length}개 파일 처리 시작`);
 
-  // 프로젝트 컨텍스트 로드
-  const projectContext = await getProjectContext();
+  // 프로젝트 컨텍스트 + 기존 하위폴더 로드
+  const [projectContext, existingSubfolders] = await Promise.all([
+    getProjectContext(),
+    getExistingSubfolders(),
+  ]);
 
   // 파일 내용 추출
   const inputs: ClassifyInput[] = [];
@@ -84,7 +87,7 @@ export async function processInbox(): Promise<InboxResult> {
   // 분류 실행
   let classifications: ClassifyResult[];
   try {
-    classifications = await classifyFiles(inputs, projectContext);
+    classifications = await classifyFiles(inputs, projectContext, existingSubfolders);
   } catch (err) {
     console.error("[PKM:Inbox] 분류 실패:", err);
     result.failed = files.length;
@@ -141,7 +144,10 @@ export async function processSingleFile(filePath: string): Promise<InboxResult> 
     details: [],
   };
 
-  const projectContext = await getProjectContext();
+  const [projectContext, existingSubfolders] = await Promise.all([
+    getProjectContext(),
+    getExistingSubfolders(),
+  ]);
   const content = await extractContent(filePath);
 
   const input: ClassifyInput = {
@@ -151,7 +157,7 @@ export async function processSingleFile(filePath: string): Promise<InboxResult> 
   };
 
   try {
-    const classifications = await classifyFiles([input], projectContext);
+    const classifications = await classifyFiles([input], projectContext, existingSubfolders);
     const cls = classifications[0];
 
     const targetPath = await moveAndTag(cls);

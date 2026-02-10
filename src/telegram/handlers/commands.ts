@@ -117,6 +117,11 @@ export function registerCommands(bot: Bot): void {
       `/pin [내용] - 중요한 정보 핀하기\n` +
       `/pins - 핀 목록 보기\n` +
       `/context - 현재 맥락 상태\n\n` +
+      `📂 문서 관리 (PKM)\n` +
+      `파일 보내기 - 자동 분류/정리\n` +
+      `"정리해줘" - 인박스 전체 분류\n` +
+      `"OO 자료 찾아줘" - 문서 검색\n` +
+      `/setup pkm - PKM 설정\n\n` +
       `⏰ 알림/일정\n` +
       `/reminders - 알림 목록\n` +
       `/briefing - 일일 브리핑 켜기/상태\n` +
@@ -129,7 +134,8 @@ export function registerCommands(bot: Bot): void {
       `• "opus로 바꿔줘"\n` +
       `• "10분 뒤에 알려줘"\n` +
       `• "기억해: 나는 채식주의자야"\n` +
-      `• "내일 일정 뭐야?"`
+      `• "내일 일정 뭐야?"\n` +
+      `• "프로젝트 만들어줘"`
     );
   });
 
@@ -181,12 +187,23 @@ export function registerCommands(bot: Bot): void {
       // 기본 cron jobs 설정 확인
       await ensureDefaultCronJobs(chatId);
 
+      // PKM 활성화 여부에 따라 안내 메시지 분기
+      let pkmHint = "";
+      try {
+        const { PKM: pkmConf } = await import("../../config/constants.js");
+        if (pkmConf.ENABLED) {
+          pkmHint = "\n\n📂 파일을 보내면 자동으로 분류해줘요!";
+        }
+      } catch { /* ignore */ }
+
       await ctx.reply(
         `안녕! ${name}이야.\n\n` +
         `명령어:\n` +
         `/clear - 대화 초기화\n` +
         `/model - AI 모델 변경\n` +
-        `/reset - 페르소나 리셋`
+        `/help - 전체 도움말\n` +
+        `/reset - 페르소나 리셋` +
+        pkmHint
       );
     }
   });

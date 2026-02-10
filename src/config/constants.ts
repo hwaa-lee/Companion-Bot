@@ -97,7 +97,6 @@ export const SEARCH = {
 // ============================================
 export const PKM = {
   get ENABLED() { return config().pkm?.enabled ?? false; },
-  get ROOT() { return config().pkm?.root ?? "~/.companionbot/pkm"; },
   get BATCH_SIZE() { return config().pkm?.classify?.batchSize ?? 10; },
   get CONFIDENCE_THRESHOLD() { return config().pkm?.classify?.confidenceThreshold ?? 0.8; },
   get WATCHER_DEBOUNCE_MS() { return config().pkm?.classify?.watcherDebounceMs ?? 2000; },

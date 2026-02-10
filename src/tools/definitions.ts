@@ -281,18 +281,18 @@ export const compactTools = [
   // === PKM (문서 관리) ===
   {
     name: "pkm_inbox",
-    description: "인박스 파일 분류. file 없으면 전체 처리, file 있으면 단일 파일 처리",
+    description: "로컬 PKM 문서 분류. _Inbox/ 파일을 AI가 PARA 방법론으로 자동 분류. memory_search와 다름: PKM은 로컬 파일 관리",
     input_schema: {
       type: "object" as const,
       properties: {
-        file: { type: "string", description: "단일 파일 경로 (선택)" },
+        file: { type: "string", description: "단일 파일 경로 (선택, 없으면 전체 인박스)" },
       },
       required: [],
     },
   },
   {
     name: "pkm_search",
-    description: "PKM 문서 검색 (벡터+키워드 하이브리드)",
+    description: "PKM 로컬 문서 검색 (벡터+키워드). 사용자가 저장한 파일/자료를 찾을 때 사용. memory_search와 다름: memory는 대화 기억, pkm은 파일 검색",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -304,11 +304,11 @@ export const compactTools = [
   },
   {
     name: "pkm_project",
-    description: "프로젝트 관리: create/list/complete/restore/rename/info",
+    description: "프로젝트 관리 (PARA의 P): create/list/complete/restore/rename/delete/info",
     input_schema: {
       type: "object" as const,
       properties: {
-        action: { type: "string", enum: ["create", "list", "complete", "restore", "rename", "info"] },
+        action: { type: "string", enum: ["create", "list", "complete", "restore", "rename", "delete", "info"] },
         name: { type: "string", description: "프로젝트 이름" },
         new_name: { type: "string", description: "새 이름 (rename)" },
         description: { type: "string", description: "프로젝트 설명 (create)" },
@@ -320,6 +320,17 @@ export const compactTools = [
     name: "pkm_init",
     description: "PKM PARA 폴더 구조 초기화",
     input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "pkm_watcher",
+    description: "_Inbox/ 폴더 감시 시작/중지. 파일 추가 시 자동 분류",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["start", "stop"] },
+      },
+      required: ["action"],
+    },
   },
 ];
 
@@ -382,6 +393,11 @@ export const toolActionMap: Record<string, Record<string, string>> = {
     complete: "pkm_project",
     restore: "pkm_project",
     rename: "pkm_project",
+    delete: "pkm_project",
     info: "pkm_project",
+  },
+  pkm_watcher: {
+    start: "pkm_watcher",
+    stop: "pkm_watcher",
   },
 };
