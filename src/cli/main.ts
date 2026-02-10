@@ -1,5 +1,5 @@
 import * as readline from "readline";
-import { checkbox, select, input, confirm, Separator } from "@inquirer/prompts";
+import { checkbox, select, input, confirm, password, Separator } from "@inquirer/prompts";
 import { getSecret, setSecret } from "../config/secrets.js";
 import {
   isWorkspaceInitialized,
@@ -11,6 +11,136 @@ import { cleanupHeartbeats } from "../heartbeat/index.js";
 import { cleanupBriefings } from "../briefing/index.js";
 import { cleanupReminders } from "../reminders/index.js";
 import { preloadEmbeddingModel, preloadVectorStore } from "../memory/index.js";
+
+// ===== CLI 서브커맨드 처리 =====
+async function handleSetupCommand(args: string[]): Promise<boolean> {
+  const subcommand = args[0];
+  const value = args[1];
+
+  switch (subcommand) {
+    case "weather":
+      if (!value) {
+        console.log("사용법: companionbot setup weather <API_KEY>");
+        console.log("\nOpenWeatherMap API 키를 설정합니다.");
+        console.log("키 발급: https://openweathermap.org/api");
+        return true;
+      }
+      await setSecret("openweathermap-api-key", value.trim());
+      console.log("✓ OpenWeatherMap API Key가 OS 키체인에 저장되었습니다.");
+      return true;
+
+    case "brave":
+      if (!value) {
+        console.log("사용법: companionbot setup brave <API_KEY>");
+        console.log("\nBrave Search API 키를 설정합니다.");
+        console.log("키 발급: https://brave.com/search/api");
+        return true;
+      }
+      await setSecret("brave-api-key", value.trim());
+      console.log("✓ Brave Search API Key가 OS 키체인에 저장되었습니다.");
+      return true;
+
+    case "telegram":
+      if (!value) {
+        console.log("사용법: companionbot setup telegram <TOKEN>");
+        console.log("\nTelegram Bot Token을 설정합니다.");
+        console.log("토큰 발급: https://t.me/BotFather");
+        return true;
+      }
+      await setSecret("telegram-token", value.trim());
+      console.log("✓ Telegram Bot Token이 OS 키체인에 저장되었습니다.");
+      return true;
+
+    case "anthropic":
+      if (!value) {
+        console.log("사용법: companionbot setup anthropic <API_KEY>");
+        console.log("\nAnthropic API 키를 설정합니다.");
+        console.log("키 발급: https://console.anthropic.com/settings/keys");
+        return true;
+      }
+      await setSecret("anthropic-api-key", value.trim());
+      console.log("✓ Anthropic API Key가 OS 키체인에 저장되었습니다.");
+      return true;
+
+    case "calendar":
+      console.log("📅 Google Calendar 설정");
+      console.log("\nCompanionBot 실행 후 /calendar_setup 명령어로 설정합니다.");
+      console.log("(OAuth 인증이 필요해서 브라우저가 열립니다)");
+      return true;
+
+    default:
+      console.log(`
+CompanionBot 설정
+
+사용법:
+  companionbot setup weather <API_KEY>     OpenWeatherMap API 키 설정
+  companionbot setup brave <API_KEY>       Brave Search API 키 설정
+  companionbot setup telegram <TOKEN>      Telegram Bot Token 설정
+  companionbot setup anthropic <API_KEY>   Anthropic API 키 설정
+  companionbot setup calendar              Google Calendar 설정 안내
+`);
+      return true;
+  }
+}
+
+// CLI 인자 처리
+async function handleCLIArgs(): Promise<boolean> {
+  const args = process.argv.slice(2);
+  
+  if (args.length === 0) {
+    return false; // 서브커맨드 없음, 봇 시작
+  }
+
+  const command = args[0];
+
+  switch (command) {
+    case "setup":
+      return handleSetupCommand(args.slice(1));
+
+    case "--help":
+    case "-h":
+      console.log(`
+CompanionBot - Claude 기반 AI 동반자
+
+사용법:
+  companionbot                 봇 시작 (첫 실행 시 설정 안내)
+  companionbot setup <...>     API 키 설정
+
+설정 명령어:
+  companionbot setup weather <KEY>     날씨 API 설정 (OpenWeatherMap)
+  companionbot setup brave <KEY>       웹 검색 API 설정 (Brave)
+  companionbot setup telegram <TOKEN>  Telegram 토큰 설정
+  companionbot setup anthropic <KEY>   Anthropic API 설정
+  companionbot setup calendar          캘린더 설정 안내
+
+옵션:
+  -h, --help     도움말 표시
+  -v, --version  버전 표시
+`);
+      return true;
+
+    case "--version":
+    case "-v":
+      // package.json에서 버전 읽기
+      try {
+        const { readFile } = await import("fs/promises");
+        const { fileURLToPath } = await import("url");
+        const { dirname, join } = await import("path");
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        const pkgPath = join(__dirname, "..", "..", "package.json");
+        const pkg = JSON.parse(await readFile(pkgPath, "utf-8"));
+        console.log(`CompanionBot v${pkg.version}`);
+      } catch {
+        console.log("CompanionBot (버전 정보 없음)");
+      }
+      return true;
+
+    default:
+      console.log(`알 수 없는 명령어: ${command}`);
+      console.log("도움말: companionbot --help");
+      return true;
+  }
+}
 
 function createPrompt(): readline.Interface {
   return readline.createInterface({
@@ -31,6 +161,19 @@ interface FeatureSelection {
   webSearch: boolean;
   calendar: boolean;
   weather: boolean;
+}
+
+// 토큰/API 키 형식 검증
+function validateTelegramToken(token: string): boolean {
+  // Telegram 토큰 형식: 숫자:영문숫자_-
+  // 예: 123456789:ABCdefGHI-jkl_123
+  const pattern = /^\d+:[A-Za-z0-9_-]+$/;
+  return pattern.test(token);
+}
+
+function validateAnthropicKey(key: string): boolean {
+  // Anthropic API 키: sk-ant- 로 시작
+  return key.startsWith("sk-ant-");
 }
 
 async function interactiveSetup(): Promise<boolean> {
@@ -115,7 +258,24 @@ Telegram에서 대화하며 일정 관리, 메모, 검색 등을 도와줍니다
       3. 토큰 복사 (예: 123456:ABC-DEF...)
       🔗 https://t.me/BotFather
 `);
-    const token = await question(rl, "      Token: ");
+    let token: string;
+    try {
+      token = await password({
+        message: "Token:",
+        mask: "*",
+        validate: (value) => {
+          if (!value || value.toLowerCase() === "q") return true; // Allow cancel
+          if (!validateTelegramToken(value)) {
+            return "형식 오류: 숫자:영문숫자_- (예: 123456789:ABC-def_123)";
+          }
+          return true;
+        },
+      });
+    } catch {
+      console.log("\n👋 설정을 취소했습니다.");
+      rl.close();
+      return false;
+    }
     if (!token || token.toLowerCase() === "q") {
       console.log("\n👋 설정을 취소했습니다.");
       rl.close();
@@ -132,7 +292,24 @@ Telegram에서 대화하며 일정 관리, 메모, 검색 등을 도와줍니다
       3. 키 복사 (sk-ant-...)
       🔗 https://console.anthropic.com/settings/keys
 `);
-    const apiKey = await question(rl, "      API Key: ");
+    let apiKey: string;
+    try {
+      apiKey = await password({
+        message: "API Key:",
+        mask: "*",
+        validate: (value) => {
+          if (!value || value.toLowerCase() === "q") return true; // Allow cancel
+          if (!validateAnthropicKey(value)) {
+            return "형식 오류: sk-ant- 로 시작해야 합니다";
+          }
+          return true;
+        },
+      });
+    } catch {
+      console.log("\n👋 설정을 취소했습니다. (Telegram 토큰은 저장됨)");
+      rl.close();
+      return false;
+    }
     if (!apiKey || apiKey.toLowerCase() === "q") {
       console.log("\n👋 설정을 취소했습니다. (Telegram 토큰은 저장됨)");
       rl.close();
@@ -218,6 +395,12 @@ Enter를 누르면 해당 기능을 건너뛸 수 있어요.
 }
 
 async function main() {
+  // 0. CLI 서브커맨드 처리
+  const handled = await handleCLIArgs();
+  if (handled) {
+    process.exit(0);
+  }
+
   // 1. 시크릿 확인
   let token = await getSecret("telegram-token");
   let apiKey = await getSecret("anthropic-api-key");

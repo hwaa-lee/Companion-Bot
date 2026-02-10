@@ -4,7 +4,23 @@ const SERVICE_NAME = "companionbot";
 
 export type SecretKey = "telegram-token" | "anthropic-api-key" | "openweathermap-api-key" | "brave-api-key";
 
+// 환경변수 맵핑
+const ENV_MAP: Record<SecretKey, string> = {
+  "telegram-token": "TELEGRAM_TOKEN",
+  "anthropic-api-key": "ANTHROPIC_API_KEY",
+  "openweathermap-api-key": "OPENWEATHERMAP_API_KEY",
+  "brave-api-key": "BRAVE_API_KEY",
+};
+
 export async function getSecret(key: SecretKey): Promise<string | null> {
+  // 1. 환경변수 우선 체크
+  const envKey = ENV_MAP[key];
+  const envValue = process.env[envKey];
+  if (envValue) {
+    return envValue;
+  }
+
+  // 2. keytar (키체인) 체크
   try {
     return await keytar.getPassword(SERVICE_NAME, key);
   } catch {
