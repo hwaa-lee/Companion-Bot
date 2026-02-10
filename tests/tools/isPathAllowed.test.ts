@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { isPathAllowed, DANGEROUS_PATTERNS } from "../../src/tools/pathCheck.js";
+import { isPathAllowed, SENSITIVE_PATTERNS } from "../../src/tools/pathCheck.js";
 
 describe("isPathAllowed", () => {
   // 테스트용 임시 디렉토리
@@ -142,21 +142,21 @@ describe("isPathAllowed", () => {
     });
   });
 
-  describe("DANGEROUS_PATTERNS 검증", () => {
+  describe("SENSITIVE_PATTERNS 검증", () => {
     it("모든 위험 패턴이 정의되어 있음", () => {
-      expect(DANGEROUS_PATTERNS.length).toBeGreaterThan(0);
+      expect(SENSITIVE_PATTERNS.length).toBeGreaterThan(0);
     });
 
-    it(".bashrc 패턴 매칭", () => {
-      expect(DANGEROUS_PATTERNS.some(p => p.test("/home/user/.bashrc"))).toBe(true);
+    it(".env 패턴 매칭", () => {
+      expect(SENSITIVE_PATTERNS.some(p => p.test("/home/user/.env"))).toBe(true);
     });
 
-    it(".zshrc 패턴 매칭", () => {
-      expect(DANGEROUS_PATTERNS.some(p => p.test("/home/user/.zshrc"))).toBe(true);
+    it(".npmrc 패턴 매칭", () => {
+      expect(SENSITIVE_PATTERNS.some(p => p.test("/home/user/.npmrc"))).toBe(true);
     });
 
     it("일반 파일은 패턴 매칭 안 됨", () => {
-      expect(DANGEROUS_PATTERNS.some(p => p.test("/home/user/document.txt"))).toBe(false);
+      expect(SENSITIVE_PATTERNS.some(p => p.test("/home/user/document.txt"))).toBe(false);
     });
   });
 
