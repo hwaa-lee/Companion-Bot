@@ -41,7 +41,10 @@ async function interactiveSetup(): Promise<boolean> {
 ║             🤖 CompanionBot 첫 실행 가이드                    ║
 ╚═══════════════════════════════════════════════════════════════╝
 
-CompanionBot은 Telegram에서 동작하는 개인 AI 비서예요.
+CompanionBot은 당신과 함께하는 AI 동반자예요.
+Telegram에서 대화하며 일정 관리, 메모, 검색 등을 도와줍니다.
+
+✨ 당신만의 CompanionBot을 만들어보세요!
 
 💡 언제든지 'q'를 입력하면 설정을 취소할 수 있어요.
 `);
@@ -193,7 +196,7 @@ Enter를 누르면 해당 기능을 건너뛸 수 있어요.
       if (features.calendar) {
         console.log(`   📅 Google Calendar
    
-      캘린더는 봇 실행 후 /calendar_setup 명령어로 설정합니다.
+      캘린더는 CompanionBot 실행 후 /calendar_setup 명령어로 설정합니다.
       (OAuth 인증이 필요해서 브라우저가 열려요)
 `);
         await question(rl, "      Enter를 눌러 계속...");
@@ -250,14 +253,14 @@ async function main() {
     console.log(`   경로: ${workspacePath}
    
    생성된 파일들:
-   ├── IDENTITY.md   ← 봇의 이름과 성격 설정
-   ├── SOUL.md       ← 봇의 행동 원칙
-   ├── USER.md       ← 당신에 대한 정보 (봇이 참고)
-   ├── AGENTS.md     ← 봇 행동 가이드
+   ├── IDENTITY.md   ← CompanionBot의 이름과 성격
+   ├── SOUL.md       ← CompanionBot의 행동 원칙
+   ├── USER.md       ← 당신에 대한 정보
+   ├── AGENTS.md     ← 운영 가이드
    ├── MEMORY.md     ← 장기 기억 저장소
    └── memory/       ← 일일 메모리 폴더
 
-   💡 팁: IDENTITY.md와 USER.md를 편집해서 봇을 커스터마이즈하세요!
+   💡 팁: IDENTITY.md와 USER.md를 편집해서 나만의 CompanionBot을 만드세요!
 `);
   }
 
@@ -282,10 +285,10 @@ async function main() {
   console.log(`   ✓ 사전 로딩 완료 (${Date.now() - preloadStart}ms)
 `);
 
-  // 6. 봇 시작
+  // 6. CompanionBot 시작
   console.log(`
 ╔═══════════════════════════════════════════════════════════════╗
-║                      🚀 봇 시작!                              ║
+║                  🚀 CompanionBot 시작!                        ║
 ╚═══════════════════════════════════════════════════════════════╝
 `);
 
@@ -293,7 +296,7 @@ async function main() {
 
   // Graceful shutdown
   async function shutdown(): Promise<void> {
-    console.log("\n👋 봇을 종료합니다...");
+    console.log("\n👋 CompanionBot을 종료합니다...");
     cleanupHeartbeats();
     cleanupBriefings();
     cleanupReminders();
@@ -317,7 +320,7 @@ async function main() {
    /help       - 도움말
    /model      - AI 모델 변경 (haiku/sonnet/opus)
    /compact    - 대화 요약 (토큰 절약)
-   /health     - 봇 상태 확인
+   /health     - 상태 확인
    /calendar   - 캘린더 연동 (Google)
 
    ⌨️  Ctrl+C로 종료
@@ -328,6 +331,37 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("Failed to start:", err);
+  console.error("\n❌ CompanionBot 시작 실패\n");
+  
+  // 에러 유형별 안내
+  const errMsg = err instanceof Error ? err.message : String(err);
+  
+  if (errMsg.includes("401") || errMsg.includes("Unauthorized")) {
+    console.error(`🔑 Telegram 토큰이 유효하지 않습니다.
+
+해결 방법:
+  1. @BotFather에서 토큰 재확인
+  2. companionbot setup telegram <새토큰> 으로 업데이트
+  3. 토큰 형식: 123456789:ABCdef... (숫자:문자열)
+`);
+  } else if (errMsg.includes("키체인") || err.name === "KeychainError") {
+    console.error(errMsg);
+  } else if (errMsg.includes("ANTHROPIC") || errMsg.includes("authentication")) {
+    console.error(`🧠 Anthropic API 키가 유효하지 않습니다.
+
+해결 방법:
+  1. https://console.anthropic.com/settings/keys 에서 키 확인
+  2. companionbot setup anthropic <새키> 으로 업데이트
+  3. 키 형식: sk-ant-api03-...
+`);
+  } else {
+    console.error(`오류: ${errMsg}
+
+문제가 지속되면:
+  • GitHub Issues: https://github.com/DinN0000/CompanionBot/issues
+  • 로그 확인: companionbot --verbose (준비 중)
+`);
+  }
+  
   process.exit(1);
 });
