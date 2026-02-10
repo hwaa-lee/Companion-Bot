@@ -2,6 +2,12 @@
 
 All notable changes to CompanionBot will be documented in this file.
 
+## [0.15.4] - 2026-02-10
+
+### 🐛 첫 실행 버그 수정
+- **keytar 에러 처리**: 키체인 접근 실패 시 setup wizard 자동 실행
+- Linux (libsecret 미설치), Docker 환경에서도 정상 동작
+
 ## [0.15.3] - 2026-02-10
 
 ### 📋 세션 핸드오프
